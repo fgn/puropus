@@ -739,3 +739,100 @@ func silencePage(t *testing.T, packet []byte, preSkip int, granule int64) []byte
 		makeOggPage(t, 5, 2, 0x04, granule, false, packet, packet, packet),
 	)
 }
+
+// offsetLink returns the pages of an Ogg Opus link with the given pre-skip
+// and output gain whose granule positions start at offset, RFC 7845 §4.5's
+// initial offset: perPage packets to a page, the last page trimming trim
+// samples.
+func offsetLink(t *testing.T, serial uint32, preSkip int, gain int16, offset int64, packets [][]byte, perPage, trim int) [][]byte {
+	t.Helper()
+	head := opus.Head{Version: 1, Channels: 1, PreSkip: preSkip, InputSampleRate: SampleRate, OutputGain: gain}.Marshal()
+	pages := [][]byte{
+		makeOggPage(t, serial, 0, 0x02, 0, false, head),
+		makeOggPage(t, serial, 1, 0, 0, false, opus.MarshalTags("test")),
+	}
+	granule := offset
+	for i := 0; i < len(packets); i += perPage {
+		page := packets[i:min(i+perPage, len(packets))]
+		for _, p := range page {
+			parsed, err := opus.Parse(p, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			granule += int64(parsed.Duration48())
+		}
+		flags := byte(0)
+		if i+perPage >= len(packets) {
+			flags, granule = 0x04, granule-int64(trim)
+		}
+		pages = append(pages, makeOggPage(t, serial, uint32(len(pages)), flags, granule, false, page...))
+	}
+	return pages
+}
+
+// A chained link may start its granule positions at an offset, as the first
+// may (RFC 7845 §4.5). Its header pages, at granule 0, used to set the
+// baseline its first audio page was measured against, so the offset read as
+// lost audio and was concealed: two 40 ms links, the second offset by 9 600
+// samples, decoded to 13 440 samples. Now a link's audio pages alone place
+// it, and the chain decodes as its links do alone, also with a pre-skip and
+// gain on the second link, its OpusTags page lost, the first link's EOS page
+// lost, or both. ffmpeg decodes the 40 ms links to 3 840 samples too.
+func TestChainedLinkGranuleOffsetIsNotAGap(t *testing.T) {
+	silence, err := opus.Silence(1, opus.BandwidthFullband, 20*ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	short := slices.Concat(offsetLink(t, 101, 0, 0, 0, [][]byte{silence[0], silence[0]}, 1, 0)...)
+	shortOffset := slices.Concat(offsetLink(t, 202, 0, 0, 9600, [][]byte{silence[0], silence[0]}, 1, 0)...)
+	if got, _ := decodeAll(t, bytes.NewReader(slices.Concat(short, shortOffset)), DecodeOptions{}); len(got) != 3840 {
+		t.Fatalf("two 40 ms links: %d samples, want 3840", len(got))
+	}
+
+	audio := fixturePackets(t, "ogg-celt-fb.opus")
+	a := offsetLink(t, 1, 312, 0, 0, audio[:30], 10, 500)
+	b := offsetLink(t, 2, 312, 3*256, 9600, audio[30:60], 10, 300)
+	ended := slices.Clone(a[:len(a)-1]) // a, had it ended on the page before its last
+	before := bytes.Clone(ended[len(ended)-1])
+	before[5] |= 0x04
+	fixOggCRC(before, oggPage{start: 0, size: len(before)})
+	ended[len(ended)-1] = before
+	alone := func(pages [][]byte) []float32 {
+		pcm, _ := decodeAll(t, bytes.NewReader(slices.Concat(pages...)), DecodeOptions{})
+		return pcm
+	}
+	corruptLast := func(pages [][]byte) [][]byte {
+		out := slices.Clone(pages)
+		last := bytes.Clone(out[len(out)-1])
+		last[len(last)-1] ^= 0x01
+		out[len(out)-1] = last
+		return out
+	}
+	withoutTags := slices.Concat(b[:1], b[2:])
+	for _, tc := range []struct {
+		name  string
+		first [][]byte
+		next  [][]byte
+		want  []float32
+	}{
+		{"offset", a, b, slices.Concat(alone(a), alone(b))},
+		{"offset, OpusTags lost", a, withoutTags, slices.Concat(alone(a), alone(b))},
+		{"offset, EOS lost", corruptLast(a), b, slices.Concat(alone(ended), alone(b))},
+		{"offset, OpusTags and EOS lost", corruptLast(a), withoutTags, slices.Concat(alone(ended), alone(b))},
+	} {
+		data := slices.Concat(slices.Concat(tc.first...), slices.Concat(tc.next...))
+		assertSamePCM(t, tc.name, data, tc.want)
+		src, err := ReadPackets(bytes.NewReader(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 1; i < len(src.Packets); i++ {
+			if src.Packets[i].Start != src.Packets[i-1].End() {
+				t.Fatalf("%s: a hole of %d samples before packet %d", tc.name, src.Packets[i].Start-src.Packets[i-1].End(), i)
+			}
+		}
+		if durationToSamples(src.Duration()) != int64(len(tc.want)) {
+			t.Fatalf("%s: the source covers %v for %d samples", tc.name, src.Duration(), len(tc.want))
+		}
+	}
+}

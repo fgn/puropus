@@ -706,7 +706,11 @@ func (s *oggSource) readPage() error {
 	}
 	last := s.read[len(s.read)-1]
 	clear(s.read) // keep no reference to the data
-	if !last.GranuleKnown || last.Granule < 0 {
+	if !last.GranuleKnown || last.Granule < 0 || s.linkStart == len(s.page) {
+		// Only a page that completes audio packets of the link places the
+		// link's audio: a chained link's header pages, at granule 0, must
+		// not, or its first audio page's initial offset (RFC 7845 §4.5)
+		// would read as lost audio.
 		return nil
 	}
 	// The stream's end is where the previous page's granule position plus

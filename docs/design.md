@@ -211,8 +211,10 @@ lost, against §4.1, by half a packet or more are filled the same way, so
 positions follow them, as is the duration of a packet that does not parse,
 which the next Ogg granule position shows. A gap before the first audio
 page or block of a link is not found, since a first granule position or
-timestamp may be an offset (RFC 7845 §4.5), nor is one at the end of a link
-or file, which nothing after it shows. On a final Ogg page the lost audio
+timestamp may be an offset (RFC 7845 §4.5), in a chained link as in the
+first: only a page that completes audio packets places a link's audio, its
+header pages at granule 0 do not. Nor is a gap found at the end of a link or
+file, which nothing after it shows. On a final Ogg page the lost audio
 and the end trimming cannot be told apart, so the gap reaches the final
 granule position and the last packet keeps its encoder padding, its audio
 up to its length early. No gap is filled beyond 10 minutes, against a
