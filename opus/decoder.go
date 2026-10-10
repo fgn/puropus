@@ -67,8 +67,8 @@ var (
 	// errBufferTooSmall is OPUS_BUFFER_TOO_SMALL: out cannot hold the
 	// decoded samples.
 	errBufferTooSmall = errors.New("opus: output buffer too small")
-	// errPacketMismatch reports Packet metadata that data cannot have
-	// produced.
+	// errPacketMismatch reports Packet metadata that is not what Parse
+	// returns for the data.
 	errPacketMismatch = errors.New("opus: packet metadata does not match its data")
 	// errConcealDuration reports a lost duration for Conceal or DecodeFEC
 	// that is not a multiple of 2.5 ms from 2.5 to 120 ms (OPUS_BAD_ARG).
@@ -537,7 +537,9 @@ func (st *Decoder) Decode(packet []byte, out []float32) (int, error) {
 }
 
 // DecodeParsed is Decode for a packet whose table of contents has already been
-// parsed with Parse. data must be the packet bytes parsed produced from.
+// parsed with Parse. packet must be what Parse returned for data, with
+// either framing; any other Packet is rejected with an error, so a forged or
+// stale one cannot make it decode a frame layout data does not have.
 //
 // It is opus_decode_float(st, data, len, out, len(out)/Channels(), 0) with
 // one difference: a frame whose CELT redundancy is longer than the frame
@@ -634,28 +636,18 @@ func (st *Decoder) restoreState(withCELT bool) {
 	}
 }
 
-// describes reports whether p is what Parse returns for data, as far as
-// decoding depends on it: the TOC fields, and frames that lie inside data
-// and are at most MaxFrameSize bytes.
+// describes reports whether p is exactly what Parse returns for data, with
+// either framing. Bounds alone are not enough: a Packet whose frames all lie
+// inside data but that Parse would not return, two frames for a code 0
+// packet say, would decode a frame layout the packet does not have. Parsing
+// costs nanoseconds against the microseconds of decoding.
 func (p *Packet) describes(data []byte) bool {
-	if len(data) == 0 {
-		return false
-	}
-	toc := data[0]
-	if p.Config != int(toc>>3) || p.Stereo != (toc&0x4 != 0) || p.Mode != tocMode(toc) ||
-		p.Bandwidth != tocBandwidth(toc) || p.FrameDuration != tocSamplesPerFrame(toc) {
-		return false
-	}
-	if p.FrameCount < 1 || p.FrameCount > MaxFrames || p.FrameCount*p.FrameDuration > MaxPacketDuration48 {
-		return false
-	}
-	for i := 0; i < p.FrameCount; i++ {
-		offset, size := p.FrameOffset[i], p.FrameSize[i]
-		if offset < 1 || size < 0 || size > MaxFrameSize || offset > len(data)-size {
-			return false
+	for _, selfDelimited := range [...]bool{false, true} {
+		if q, err := Parse(data, selfDelimited); err == nil && q == *p {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 // Conceal advances a lost interval using the last decoded mode and bandwidth.

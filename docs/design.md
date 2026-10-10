@@ -190,9 +190,13 @@ one-second blocks, so a long stream does not repeatedly regrow one slice.
 ## Rejected packets
 
 `DecodeParsed` returns an error, leaving the decoder state exactly as it was,
-for a packet that does not parse, `Packet` metadata that does not match the
-data, and an output buffer that is too short. It does so before it changes
-anything. It also rejects a frame whose CELT redundancy is longer than the
+for a packet that does not parse, a `Packet` that is not what `Parse` returns
+for the data, and an output buffer that is too short. It parses the data
+again and compares the result field by field, which costs nanoseconds
+against the microseconds of decoding, so metadata that stays inside the data
+but describes another frame layout is rejected too
+(`TestDecodeParsedRejectsMetadataParseDoesNotReturn`). It does all this
+before it changes anything. It also rejects a frame whose CELT redundancy is longer than the
 frame itself. libopus catches that case with a sanity check in
 `opus_decode_frame` ("it should never happen for a valid packet"), drops the
 redundancy and goes on. puropus rejects the packet instead, so that a caller

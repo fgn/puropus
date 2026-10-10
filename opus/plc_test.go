@@ -3,6 +3,7 @@ package opus
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"math"
 	"os"
 	"reflect"
@@ -208,5 +209,54 @@ func TestConcealLongBurstRemainsFinite(t *testing.T) {
 				t.Fatalf("%s: non-finite recovery", name)
 			}
 		}
+	}
+}
+
+// DecodeParsed decodes only a Packet that Parse returns for the data. One
+// whose frames lie inside the data but that describes another layout, such
+// as a code 0 packet given two frames, or a frame shortened by a byte, is
+// rejected before the decoder state changes, like out-of-bounds metadata.
+func TestDecodeParsedRejectsMetadataParseDoesNotReturn(t *testing.T) {
+	data := []byte{0x80, 0xff, 0xff} // code 0: one CELT frame of two bytes
+	parsed, err := Parse(data, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := NewDecoder(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := *d
+	out := make([]float32, MaxPacketSamples)
+	for name, forge := range map[string]func(*Packet){
+		"two frames": func(p *Packet) {
+			p.FrameCount = 2
+			p.FrameOffset[1], p.FrameSize[1] = p.FrameOffset[0], p.FrameSize[0]
+		},
+		"shorter frame": func(p *Packet) { p.FrameSize[0]-- },
+		"later frame":   func(p *Packet) { p.FrameOffset[0]++; p.FrameSize[0]-- },
+		"framing code":  func(p *Packet) { p.Code = 3 },
+		"VBR flag":      func(p *Packet) { p.VBR = true },
+		"packet size":   func(p *Packet) { p.PacketSize-- },
+	} {
+		bad := parsed
+		forge(&bad)
+		if n, err := d.DecodeParsed(bad, data, out); !errors.Is(err, errPacketMismatch) {
+			t.Fatalf("%s: decoded %d samples, error %v", name, n, err)
+		}
+		if !reflect.DeepEqual(*d, before) {
+			t.Fatalf("%s: the rejected packet changed the decoder", name)
+		}
+	}
+	if n, err := d.DecodeParsed(parsed, data, out); err != nil || n != 120 {
+		t.Fatalf("the parsed packet: %d samples, %v", n, err)
+	}
+	// A self-delimited parse describes the data too.
+	sd := []byte{0x80, 0x02, 0xff, 0xff, 0x55}
+	if parsed, err = Parse(sd, true); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := d.DecodeParsed(parsed, sd, out); err != nil || n != 120 {
+		t.Fatalf("a self-delimited packet: %d samples, %v", n, err)
 	}
 }
