@@ -203,10 +203,15 @@ of the packet after it:
   lands up to 6 ms either side on its 60 ms packets (0, 65, 127, 182, ...
   ms) without drifting away. So a block is
   late only by half a packet or more, and by more than a tick of the
-  timestamps, which rounding alone can make; then as many whole packets of
-  its duration are missing as the lateness rounds to, since blocks are lost
-  whole. Jitter, a block early, and a lateness of less than half a packet
-  conceal nothing. Pausing a MediaRecorder leaves no trace: Chrome's
+  timestamps, which rounding alone can make. The gap is then as long as the
+  lateness, on the 2.5 ms grid of Opus frames, except that a lateness within
+  8 ms (or a tick) of whole packets of the next block's duration, the
+  likeliest loss, is those packets exactly, which jitter cannot shift: a
+  lost 60 ms block before another conceals 60 ms, a lost 40 ms block before
+  a 60 ms one about 40 ms, within the jitter. Jitter, a block early, and a
+  lateness of less than half a packet conceal nothing, so a lost block
+  shorter than half the next one is not found
+  (`TestWebMGapsOfOtherDurations`). Pausing a MediaRecorder leaves no trace: Chrome's
   timestamps run on without the paused time, through Web Audio or not.
 
 The gap then comes out as the lost packets would in `Tolerant` mode, in

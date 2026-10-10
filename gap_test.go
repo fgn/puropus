@@ -272,8 +272,10 @@ func TestGapsAreOnlyWhereTheContainerShowsThem(t *testing.T) {
 }
 
 // The gap rules: a WebM block is late only by half a packet or more and by
-// more than a timestamp tick, and then whole packets are missing; an Ogg
-// page's missing audio counts exactly, once it reaches half a packet.
+// more than a timestamp tick; then the gap is the lateness on the 2.5 ms
+// grid, or whole packets of the next packet's duration when the lateness is
+// within 8 ms of them. An Ogg page's missing audio counts exactly, once it
+// reaches half a packet.
 func TestGapRules(t *testing.T) {
 	for _, tc := range []struct {
 		late, next, tick int64
@@ -284,16 +286,20 @@ func TestGapRules(t *testing.T) {
 		{288, 2880, 48, 0},     // and its 6 ms
 		{-288, 2880, 48, 0},    // early
 		{1439, 2880, 48, 0},    // just under half a packet
-		{1440, 2880, 48, 2880}, // half: one packet
-		{2880 - 288, 2880, 48, 2880},
-		{2880 + 288, 2880, 48, 2880},
+		{1440, 2880, 48, 1440}, // half: a gap, of its length
+		{1920, 2880, 48, 1920}, // a 40 ms block lost before a 60 ms one
+		{1930, 2880, 48, 1920}, // on the grid
+		{2880 - 384, 2880, 48, 2880},
+		{2880 + 384, 2880, 48, 2880}, // within 8 ms of a packet: one packet
+		{2880 + 385, 2880, 48, 3240},
 		{2*2880 + 96, 2880, 48, 2 * 2880},
 		{479, 960, 48, 0},
-		{480, 960, 48, 960},
+		{480, 960, 48, 480},
+		{960 + 300, 960, 48, 960},
 		{480, 960, 480, 0}, // a tick of 10 ms is rounding, not loss
 		{481, 960, 480, 960},
 		{1000, 0, 48, 0}, // a packet that does not parse has no duration to count in
-		{1 << 40, 2880, 48, maxGap / 2880 * 2880},
+		{1 << 40, 2880, 48, maxGap},
 	} {
 		if got := webmGap(tc.late, tc.next, tc.tick); got != tc.want {
 			t.Errorf("webmGap(%d, %d, %d) = %d, want %d", tc.late, tc.next, tc.tick, got, tc.want)
@@ -525,4 +531,100 @@ func TestReleaseAroundAGapKeepsNativeAligned(t *testing.T) {
 			}
 		}
 	}
+}
+
+// A lost WebM block need not last as long as the block after it. With a
+// 20 ms block at 0 ms and a 60 ms block at 60 ms, 40 ms are missing; the
+// gap used to be rounded to whole packets of the next block's duration,
+// 60 ms, so the next block landed at 80 ms. A gap is now as long as the
+// lateness, on the 2.5 ms grid, and whole packets only when the lateness is
+// within 8 ms of them. In a stream of 20, 40 and 60 ms packets with ±3 ms
+// of timestamp jitter, nothing is concealed; a lost block that the next
+// block's duration divides comes out exactly, any other within the jitter
+// of its length; and a lost block shorter than half the next one is not
+// found, the price of not mistaking jitter for loss.
+func TestWebMGapsOfOtherDurations(t *testing.T) {
+	short, err := opus.Silence(1, opus.BandwidthFullband, 20*ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	long, err := opus.Silence(1, opus.BandwidthFullband, 60*ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := timestampedWebM(t, [][]byte{short[0], long[0]}, 1000000, []int64{0, 60})
+	src, err := ReadPackets(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pcm, _ := decodeAll(t, bytes.NewReader(data), DecodeOptions{}); len(pcm) != 5760 || src.Packets[1].Start != 2880 {
+		t.Fatalf("%d samples, the 60 ms block at %d, want 5760 and 2880", len(pcm), src.Packets[1].Start)
+	}
+
+	byDuration := map[int64][][]byte{}
+	for _, name := range []string{"webm-celt-20ms.webm", "webm-celt-40ms.webm", "webm-celt-60ms.webm"} {
+		for _, p := range fixturePackets(t, name) {
+			parsed, err := opus.Parse(p, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			d := int64(parsed.Duration48())
+			byDuration[d] = append(byDuration[d], p)
+		}
+	}
+	pattern := []int64{960, 1920, 2880, 960, 960, 2880, 1920, 1920, 960, 2880}
+	packets := make([][]byte, 0, 300)
+	durations := make([]int64, 0, 300)
+	for i := range 300 {
+		d := pattern[i%len(pattern)]
+		pool := byDuration[d]
+		packets = append(packets, pool[i%len(pool)])
+		durations = append(durations, d)
+	}
+	starts := make([]int64, len(packets))
+	for i := 1; i < len(starts); i++ {
+		starts[i] = starts[i-1] + durations[i-1]
+	}
+	rng := rand.New(rand.NewPCG(7, 9))
+	ticks := make([]int64, len(packets))
+	for i, s := range starts {
+		ticks[i] = max(int64(math.Round(float64(s)/48+rng.Float64()*6-3)), 0)
+	}
+	exact, _ := decodeAll(t, bytes.NewReader(timestampedWebM(t, packets, 1000000, multiplesOf(starts))), DecodeOptions{})
+	if got, _ := decodeAll(t, bytes.NewReader(timestampedWebM(t, packets, 1000000, ticks)), DecodeOptions{}); !slices.Equal(got, exact) {
+		t.Fatalf("jittered timestamps: %d samples, want the %d of the packets", len(got), len(exact))
+	}
+	jitter := int64(6 * 48)
+	for i := 10; i+1 < len(packets); i++ {
+		lost, next := durations[i], durations[i+1]
+		data := timestampedWebM(t, slices.Concat(packets[:i], packets[i+1:]), 1000000, slices.Concat(ticks[:i], ticks[i+1:]))
+		src, err := ReadPackets(bytes.NewReader(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		hole := src.Packets[i].Start - src.Packets[i-1].End()
+		switch {
+		case lost < next/2-jitter:
+			if hole != 0 {
+				t.Fatalf("a %d-sample block lost before a %d-sample one: a hole of %d, want none found", lost, next, hole)
+			}
+		case lost%next == 0:
+			if hole != lost {
+				t.Fatalf("a %d-sample block lost before a %d-sample one: a hole of %d", lost, next, hole)
+			}
+		case lost >= next/2+jitter:
+			if abs(hole-lost) > jitter+60 {
+				t.Fatalf("a %d-sample block lost before a %d-sample one: a hole of %d", lost, next, hole)
+			}
+		}
+	}
+}
+
+// multiplesOf returns sample positions as millisecond ticks.
+func multiplesOf(starts []int64) []int64 {
+	out := make([]int64, len(starts))
+	for i, s := range starts {
+		out[i] = s / 48
+	}
+	return out
 }

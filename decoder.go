@@ -884,15 +884,26 @@ func blockSamples(padding time.Duration, coded int64) int {
 // clock, rounded to the millisecond: Chrome's, through Web Audio, lands up
 // to ±6 ms off the samples' clock on 60 ms packets. So a block is late only
 // by half a packet or more, and by more than a tick, which rounding alone
-// can make it; then whole packets of its duration are missing, as many as
-// the lateness rounds to, since blocks are lost whole.
+// can make it. The gap is then as long as the lateness, on the 2.5 ms grid
+// of Opus frames, unless the lateness is within webmJitter (or a tick) of
+// whole packets of the next packet's duration, the likeliest loss: then it
+// is those packets, which a lost block's rounded timestamps cannot shift.
 func webmGap(late, next, tick int64) int {
 	if next <= 0 || late < (next+1)/2 || late <= tick {
 		return 0
 	}
-	packets := min((late+next/2)/next, maxGap/next)
-	return int(packets * next)
+	tolerance := min(max(webmJitter, tick), (next-1)/2)
+	if k := (late + next/2) / next; max(late-k*next, k*next-late) <= tolerance {
+		return int(min(k, maxGap/next) * next)
+	}
+	const grid = 120
+	return int(min((late+grid/2)/grid*grid, maxGap))
 }
+
+// webmJitter is how far WebM block timestamps may land from the samples'
+// clock, between two blocks, and still count as whole lost packets: 8 ms,
+// above the 6 ms Chrome's MediaRecorder shows through Web Audio.
+const webmJitter = 8 * SampleRate / 1000
 
 func (s *webmSource) next() ([]byte, packetMeta, error) {
 	b, err := s.r.Next()
