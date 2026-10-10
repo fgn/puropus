@@ -763,3 +763,65 @@ func abs(n int64) int64 {
 	}
 	return n
 }
+
+// A WebM file can discard whole leading blocks with a negative
+// DiscardPadding; a cut used to keep them all as decoder warm-up and sum
+// their skips into a pre-skip that wrapped in the OpusHead's 16 bits: 24
+// discarded 60 ms blocks before an audible one gave a pre-skip of 69 120,
+// and the written Ogg decoded to 68 416 samples instead of 2 880. Cut now
+// keeps at most 80 ms of warm-up, RFC 7845's recommended pre-roll, so the
+// cut decodes to the source's sample count and, once the decoder has
+// settled, to its audio bit for bit; the writers refuse a pre-skip the OpusHead cannot
+// hold, before writing anything. ffmpeg decodes the source to 2 880 samples
+// too, and the old cut to 68 416.
+func TestCutKeepsLimitedWarmUpBeforeDiscardedBlocks(t *testing.T) {
+	packets := fixturePackets(t, "webm-celt-60ms.webm")[:50]
+	discard := map[int]int{}
+	for i := range 24 {
+		discard[i] = -2880
+	}
+	data := webmFile(t, 1, 0, packets, discard)
+	direct, _ := decodeAll(t, bytes.NewReader(data), DecodeOptions{})
+	src, err := ReadPackets(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if src.Duration() != 26*60*ms || len(direct) != 26*2880 {
+		t.Fatalf("source covers %v, decodes to %d samples", src.Duration(), len(direct))
+	}
+	out, err := Cut(src, Edit{Keep: []Interval{{0, src.Duration()}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Header.PreSkip != 2*2880 || len(out.Packets) != 28 {
+		t.Fatalf("the cut keeps %d packets with a pre-skip of %d, want 2 of warm-up and 5760", len(out.Packets), out.Header.PreSkip)
+	}
+	for _, format := range []Format{FormatOgg, FormatWebM} {
+		pcm := decodeStream(t, out, format)
+		if len(pcm) != len(direct) {
+			t.Fatalf("%v: the cut decodes to %d samples, want %d", format, len(pcm), len(direct))
+		}
+		// 80 ms of warm-up instead of 1.44 s leaves the first packets
+		// within 1e-2 (5e-3 here), and the decoders agree bit for bit
+		// within a third of a second.
+		if d := maxAbsDiff(pcm, direct); d > 1e-2 {
+			t.Fatalf("%v: the cut differs from the source by %g", format, d)
+		}
+		if half := len(direct) / 2; !slices.Equal(pcm[half:], direct[half:]) {
+			t.Fatalf("%v: the cut's second half is not the source's", format)
+		}
+	}
+
+	// A Stream whose pre-skip an OpusHead cannot hold is refused unwritten.
+	big := &Stream{Header: Header{Channels: 1}}
+	for i := range 25 {
+		big.Packets = append(big.Packets, Packet{Data: packets[i], Skip: 2880})
+	}
+	big.Packets = append(big.Packets, Packet{Data: packets[25], Duration: 2880})
+	for _, format := range []Format{FormatOgg, FormatWebM} {
+		var buf bytes.Buffer
+		if err := big.Write(&buf, format); !errors.Is(err, ErrUnsupported) || buf.Len() != 0 {
+			t.Fatalf("%v: a pre-skip of %d: %v, %d bytes written", format, 25*2880, err, buf.Len())
+		}
+	}
+}

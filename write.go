@@ -73,6 +73,11 @@ func (s *Stream) WriteOgg(w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	for k, link := range links {
+		if err := checkPreSkip(link.preSkip, k); err != nil {
+			return err // before writing anything
+		}
+	}
 	used := map[uint32]bool{}
 	for k, link := range links {
 		serial := linkSerial(link.packets, k)
@@ -137,6 +142,9 @@ func (s *Stream) WriteWebM(w io.Writer) error {
 		return err
 	}
 	first := links[0]
+	if err := checkPreSkip(first.preSkip, 0); err != nil {
+		return err
+	}
 	for k, link := range links[1:] {
 		if link.header.OutputGain != first.header.OutputGain {
 			return unsupported("WebM output of links with different output gains (%d and %d, link %d)", first.header.OutputGain, link.header.OutputGain, k+1)
@@ -169,6 +177,15 @@ func (s *Stream) WriteWebM(w io.Writer) error {
 		}
 	}
 	return ww.Close()
+}
+
+// checkPreSkip reports a link pre-skip that an OpusHead cannot carry. Cut
+// keeps at most maxWarmUp of decoder warm-up, so its streams always fit.
+func checkPreSkip(preSkip, link int) error {
+	if preSkip > opus.MaxPreSkip {
+		return unsupported("pre-skip of %d samples on link %d, beyond the %d an OpusHead holds", preSkip, link, opus.MaxPreSkip)
+	}
+	return nil
 }
 
 // head returns the OpusHead a link is written with.

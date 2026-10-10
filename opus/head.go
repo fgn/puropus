@@ -49,8 +49,13 @@ func ParseHead(data []byte) (Head, error) {
 	return head, nil
 }
 
+// MaxPreSkip is the largest pre-skip an OpusHead can carry in its 16 bits.
+const MaxPreSkip = 0xFFFF
+
 // Marshal encodes the header as a 19-byte OpusHead packet, writing a zero
-// Version as 1.
+// Version as 1. The fields must fit their OpusHead widths, PreSkip up to
+// MaxPreSkip and Version and Channels up to 255: Marshal keeps only their low
+// bits, so a writer checks them first.
 func (h Head) Marshal() []byte {
 	out := make([]byte, 19)
 	copy(out, "OpusHead")

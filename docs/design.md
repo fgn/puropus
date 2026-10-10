@@ -310,8 +310,12 @@ sample positions, extended, clamped to the retained packets, sorted, and
 merged. Each region then selects packets by overlap (`SnapOutward`),
 containment (`SnapInward`), or, with an `Encoder`, by copying the interior and
 re-encoding the guards (`SnapExact`). In the first two modes a kept first
-packet brings along any packets before it that lie inside the pre-skip, so the
-decoder warm-up they carry is kept too. Exact guards are the stretches between
+packet brings along the packets of its link before it that lie inside the
+pre-skip, so the decoder warm-up they carry is kept too, but at most 80 ms of
+them, the pre-roll RFC 7845 §4.6 recommends: a WebM file can discard any
+number of whole leading blocks with negative `DiscardPadding`, and their sum
+could exceed the 16 bits of the `OpusHead` pre-skip, which the writers check
+before writing anything (`ErrUnsupported`). Exact guards are the stretches between
 the interval boundary and the first or last copied packet, at least
 `Edit.Guard` (80 ms by default) and rounded to the nearest 2.5 ms so the
 encoder receives whole Opus frames, which puts each edge of the output within

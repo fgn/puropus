@@ -441,11 +441,18 @@ func (b *builder) fillHole(n, at int64) error {
 	return b.silence(samplesToDuration((n+grid-1)/grid*grid), b.bandwidthNear(at-1))
 }
 
+// maxWarmUp is the most decoder warm-up Cut keeps before a packet: 80 ms,
+// the pre-roll RFC 7845 §4.6 recommends to start decoding before a seek
+// target. Whole packets the container discards, such as WebM blocks a
+// negative DiscardPadding removes, beyond that are dropped, which also keeps
+// the pre-skip they would add within what an OpusHead holds.
+const maxWarmUp = 80 * SampleRate / 1000
+
 // selectPackets returns the source packets a region keeps: those overlapping
 // it, or lying inside it when inward. A kept packet brings the packets of its
-// link before it that lie entirely inside the pre-skip, so the decoder
-// warm-up they carry is kept with it. Regions are disjoint and sorted, so no
-// packet is selected twice.
+// link before it that lie entirely inside the pre-skip, up to maxWarmUp of
+// them, so the decoder warm-up they carry is kept with it. Regions are
+// disjoint and sorted, so no packet is selected twice.
 func (b *builder) selectPackets(reg region, inward bool) []Packet {
 	packets := b.src.Packets
 	i := b.hint
@@ -457,8 +464,10 @@ func (b *builder) selectPackets(reg region, inward bool) []Packet {
 		i++
 	}
 	after := i
-	for first > b.hint && first < after && packets[first-1].Duration == 0 && packets[first-1].Link == packets[first].Link {
+	for warmUp := 0; warmUp < maxWarmUp && first > b.hint && first < after &&
+		packets[first-1].Duration == 0 && packets[first-1].Link == packets[first].Link; {
 		first--
+		warmUp += packets[first].Coded()
 	}
 	b.hint = max(b.hint, after)
 	return packets[first:after]
