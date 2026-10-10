@@ -182,7 +182,10 @@ scalar kernel, `accel_*.go` the dispatch and vector kernels.
   - `scalar`: eight float32 partial sums; products are rounded before they are
     added (an explicit conversion stops the compiler from fusing), so the
     result does not depend on the platform. Checked: identical output bits for
-    amd64 at GOAMD64=v1 and v3 and for 386 with GO386=sse2 and softfloat.
+    amd64 at GOAMD64=v1 and v3 and for 386 with GO386=sse2 and softfloat. The
+    100 taps are written out rather than looped over (Go does not unroll
+    loops), which takes 18% off the filter's time;
+    `TestScalarMatchesLoop` checks them against the loop bit for bit.
   - `simd-amd64-avx` (128-bit, two 4-lane accumulators) and `simd-amd64-avx2`
     (256-bit): multiply then add, bit-identical to scalar.
   - `simd-amd64-avx2-fma`: fused multiply-add; bit-identical to FFmpeg on this
@@ -235,6 +238,8 @@ scalar kernel, `accel_*.go` the dispatch and vector kernels.
   WebM streams whose every block discards a few samples.
 - Kernels: every vector kernel against scalar (exact, or within the stated
   bound for fused kernels), with exactly sized input so over-reads panic;
+  the scalar kernel's written-out taps against the loop they replace, bit for
+  bit, on random input with signed zeros, subnormals and infinities;
   dispatch against the CPU features.
 - `RESAMPLE_FFMPEG=<ffmpeg> go test -run TestFFmpegLive` compares 200 random
   streams (lengths 0 … 20000, random chunking) with a live binary;
@@ -257,15 +262,17 @@ Errors against FFmpeg (gates: RMS 1e-6, peak 1e-4):
 The worst case leaves a factor 28 of margin on the RMS gate and 800 on the
 peak gate. The avx512 kernel could not run on this machine (no AVX-512).
 
-Speed per output sample, `BenchmarkProcess` with 960-sample packets, one
-core of an i9-14900HX pinned to a 5.8 GHz core (`taskset -c 8`):
+Speed per output sample, `BenchmarkProcess` with 960-sample packets and
+with 123-sample ones (41 outputs, so every call ends in a partial group),
+on one P-core of an i9-14900HX (`taskset -c 6`, `GOMAXPROCS=1`), medians of
+seven or more interleaved runs:
 
-| kernel | ns/output |
-|---|---|
-| scalar (default build) | 23.3 |
-| simd-amd64-avx | 7.0 |
-| simd-amd64-avx2 | 4.2 |
-| simd-amd64-avx2-fma | 4.3 |
+| kernel | 960 samples | 123 samples |
+|---|---|---|
+| scalar (default build) | 19.1 | 19.3 |
+| simd-amd64-avx | 7.0 | 8.0 |
+| simd-amd64-avx2 | 4.2 | 5.1 |
+| simd-amd64-avx2-fma | 4.3 | 5.2 |
 
 The machine was shared with other work; on a throttled core all numbers were
 about twice as high.

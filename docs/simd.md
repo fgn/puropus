@@ -138,10 +138,10 @@ tier reproduces FFmpeg n9.0.2's bits on the machine that made the goldens
 ## Where the time goes
 
 Measured on one P-core of an i9-14900HX (`taskset`), in milliseconds of CPU
-per second of audio, medians of five interleaved rounds. The codec rows time
-the packet decoder (`opus.Decoder`) alone; the last row is
-`BenchmarkStreamTo16k`, the whole path from a WebM arriving through an
-`io.Pipe` to 16 kHz PCM. The SIMD column holds for `GOAMD64=v1` and `v3`
+per second of audio, medians of five interleaved rounds (nine for the last
+row). The codec rows time the packet decoder (`opus.Decoder`) alone; the
+last row is `BenchmarkStreamTo16k`, the whole path from a WebM arriving
+through an `io.Pipe` to 16 kHz PCM. The SIMD column holds for `GOAMD64=v1` and `v3`
 alike, which measure within 0.5% of each other.
 
 | Stream | Scalar | SIMD |
@@ -153,7 +153,7 @@ alike, which measure within 0.5% of each other.
 | SILK narrowband | 0.32 | 0.21 |
 | SILK mediumband | 0.42 | 0.30 |
 | stereo SILK wideband, 32 kb/s | 1.14 | 0.86 |
-| `StreamTo16k`: WebM, mono CELT, 60 ms → 16 kHz | 1.42 | 0.96 |
+| `StreamTo16k`: WebM, mono CELT, 60 ms → 16 kHz | 1.32 | 0.92 |
 
 CELT, mono fullband 60 ms, by stage (from profiles taken a few commits before
 the final build, so approximate):

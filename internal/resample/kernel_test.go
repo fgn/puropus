@@ -15,6 +15,77 @@ import (
 // each other relative to the sum of absolute products.
 const fusedBound = 32.0 / (1 << 24)
 
+// filterLoop is filterScalar with its taps in a loop, eight at a time, rather
+// than written out: the same products and sums in the same order.
+func filterLoop(dst, src []float32) {
+	for k := range dst {
+		w := (*[nTaps]float32)(src[3*k:])
+		var s0, s1, s2, s3, s4, s5, s6, s7 float32
+		for i := 0; i < vecTaps; i += 8 {
+			x := (*[8]float32)(w[i:])
+			t := (*[8]float32)(taps[i:])
+			s0 += float32(x[0] * t[0])
+			s1 += float32(x[1] * t[1])
+			s2 += float32(x[2] * t[2])
+			s3 += float32(x[3] * t[3])
+			s4 += float32(x[4] * t[4])
+			s5 += float32(x[5] * t[5])
+			s6 += float32(x[6] * t[6])
+			s7 += float32(x[7] * t[7])
+		}
+		s0 += float32(w[vecTaps] * taps[vecTaps])
+		s1 += float32(w[vecTaps+1] * taps[vecTaps+1])
+		s2 += float32(w[vecTaps+2] * taps[vecTaps+2])
+		s3 += float32(w[vecTaps+3] * taps[vecTaps+3])
+		dst[k] = ((s0 + s4) + (s2 + s6)) + ((s1 + s5) + (s3 + s7))
+	}
+}
+
+// TestScalarMatchesLoop checks filterScalar's written-out taps against
+// filterLoop bit for bit, on random input of several scales mixed with
+// signed zeros, subnormals and infinities, and on a window of zeros whose
+// products are all -0: its output is +0 only because each sum starts at +0.
+func TestScalarMatchesLoop(t *testing.T) {
+	rng := rand.New(rand.NewPCG(22, 23))
+	const n = 500
+	scales := []float32{1, 1e-3, 3e4, 1e-40}
+	inputs := make([][]float32, 0, len(scales)+1)
+	for _, scale := range scales {
+		x := randomSignal(rng, 3*(n-1)+nTaps)
+		for i := range x {
+			x[i] *= scale
+			switch rng.IntN(40) {
+			case 0:
+				x[i] = float32(math.Copysign(0, -1))
+			case 1:
+				x[i] = 0
+			case 2:
+				x[i] = math.Float32frombits(rng.Uint32() & 0x807fffff) // subnormal
+			case 3:
+				x[i] = float32(math.Inf(1 - 2*rng.IntN(2)))
+			}
+		}
+		inputs = append(inputs, x)
+	}
+	negZero := make([]float32, nTaps)
+	for i, v := range taps {
+		negZero[i] = float32(math.Copysign(0, -float64(v)))
+	}
+	inputs = append(inputs, negZero)
+	for _, x := range inputs {
+		n := (len(x)-nTaps)/3 + 1
+		got, want := make([]float32, n), make([]float32, n)
+		filterScalar(got, x)
+		filterLoop(want, x)
+		for i := range got {
+			if math.Float32bits(got[i]) != math.Float32bits(want[i]) {
+				t.Fatalf("output %d is %g (%#08x), the loop gives %g (%#08x)", i,
+					got[i], math.Float32bits(got[i]), want[i], math.Float32bits(want[i]))
+			}
+		}
+	}
+}
+
 func TestKernelsMatchScalar(t *testing.T) {
 	rng := rand.New(rand.NewPCG(20, 21))
 	for _, scale := range []float32{1, 1e-3, 3e4} {
