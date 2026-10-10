@@ -69,7 +69,9 @@ for {
 reporting an error, and the input can arrive one byte at a time. Ogg pre-skip
 and end trimming, WebM `CodecDelay` and `DiscardPadding`, chained Ogg links,
 and the header output gain are all applied. The 16 kHz output matches FFmpeg's
-default resampler.
+default resampler. A corrupt Ogg page is dropped and costs only the Opus
+packets it carries, so a corrupt page of another grouped stream costs none,
+and a chained link whose last page is lost ends where the next one begins.
 
 ## Cut
 

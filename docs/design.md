@@ -100,8 +100,29 @@ as a fallback when there is no `OpusHead`. The WebM reader handles
 unknown-size Segment and Cluster elements, as live recordings have them,
 `SimpleBlock`s and `BlockGroup`s, and skips other tracks; laced blocks are an
 error. The Ogg reader selects the Opus stream among grouped logical streams
-and reads chained links in sequence. A page with a bad checksum or version is
-dropped and the reader resynchronizes on the next capture pattern.
+and reads chained links in sequence.
+
+A page with a bad checksum or version is dropped, and the reader
+resynchronizes on the next capture pattern, looking in the dropped page's own
+bytes first so that a corrupt page size cannot swallow the pages after it. A
+dropped page could belong to any stream, since its serial number is as
+untrustworthy as the rest of it. So an Opus packet that spans pages is
+dropped only when the Opus stream's own page sequence numbers show that the
+stream lost a page, and then its fragments are discarded, never joined. A
+corrupt page of another grouped stream costs no audio.
+
+RFC 3533 places all BOS pages of a link before its other pages, so a BOS
+page that follows the Opus stream's data starts the next chained link even
+when the Opus stream's EOS page was lost. The file then decodes as if the
+link had ended on the page before: the lost page's packets are missing, as
+is the end trimming its granule position set, and the next link's header
+applies. A chained link whose OpusTags page was lost is decoded too;
+the first link must have its OpusTags. ffmpeg handles these cases the same
+way, except that it joins a packet's fragments across a lost page, into a
+packet that fails to decode (its native decoder renders it as silence); it
+loses the pages swallowed by a corrupt page whose size runs past the end of
+the input; it cannot read a grouped chained link at all; and ffmpeg 6.1.1,
+though not n9.0.2, stops at a chained link without OpusTags.
 
 A packet that cannot be parsed stops decoding, or is skipped in `Tolerant`
 mode. One that parses but cannot be decoded stops decoding too, or in
@@ -172,7 +193,11 @@ entirely inside the pre-skip contributes nothing. Chained Ogg links continue
 the same timeline, the boundary marked by the first link's `Trim` and the
 second's `Skip`. `Source.Native`, when kept, starts at `Packets[0].Start`, and
 `ReleasePackets` drops native PCM only up to the first packet it retains, so
-the two never drift apart.
+the two never drift apart. A kept `Source.Native` is not nil even when the
+packets decode to nothing, so `Cut` can tell that case from PCM that was
+never kept. `ReleasePackets` also keeps packets inside the pre-skip for as
+long as it keeps the packet after them, whose decoder warm-up they carry, as
+`Cut` keeps them with it.
 
 `Cut` works on packets, never on audio. Intervals are converted to 48 kHz
 sample positions, extended, clamped to the retained packets, sorted, and
