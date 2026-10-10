@@ -646,3 +646,86 @@ func TestOggWithoutOpusStreamIsUnsupported(t *testing.T) {
 		t.Fatalf("OpusHead alone: %v, want ErrTruncated", err)
 	}
 }
+
+// RFC 7845 §4.4 sets the final page's sample count by its granule position,
+// so the end trimming spreads over the page's packets, from the last back,
+// when it is longer than the last packet: a packet trimmed whole contributes
+// nothing and keeps a Trim of its coded duration. ffmpeg decodes these files
+// to the same counts (480 samples for three 20 ms packets with a final
+// granule of 480); puropus used to trim only the last packet and returned
+// 1920.
+func TestOggEndTrimSpansTheFinalPage(t *testing.T) {
+	short := readFixture(t, "ogg-celt-short.opus") // three 960-sample packets on one audio page, pre-skip 312
+	untrimmed := bytes.Clone(short)
+	audio := oggPages(t, short)[2]
+	binary.LittleEndian.PutUint64(untrimmed[audio.start+6:], 2880)
+	fixOggCRC(untrimmed, audio)
+	full, _ := decodeAll(t, bytes.NewReader(untrimmed), DecodeOptions{})
+	if len(full) != 2880-312 {
+		t.Fatalf("untrimmed: %d samples", len(full))
+	}
+	silence, err := opus.Silence(1, opus.BandwidthFullband, 20*ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name     string
+		data     []byte
+		granule  int64
+		samples  int
+		duration []int // of the three packets
+		trim     []int
+	}{
+		{"silence, no pre-skip", silencePage(t, silence[0], 0, 480), 480, 480, []int{480, 0, 0}, []int{480, 960, 960}},
+		{"into the pre-skip", silencePage(t, silence[0], 312, 480), 480, 168, []int{168, 0, 0}, []int{480, 960, 960}},
+		{"fixture", nil, 1000, 1000 - 312, []int{648, 40, 0}, []int{0, 920, 960}},
+		// Granule 100 ends the stream inside the pre-skip: no audio at all.
+		{"inside the pre-skip", nil, 100, 0, []int{0, 0, 0}, []int{860, 960, 960}},
+	} {
+		data := tc.data
+		if data == nil {
+			data = bytes.Clone(short)
+			binary.LittleEndian.PutUint64(data[audio.start+6:], uint64(tc.granule))
+			fixOggCRC(data, audio)
+		}
+		got, dec := decodeAll(t, bytes.NewReader(data), DecodeOptions{KeepPackets: true})
+		if len(got) != tc.samples || dec.Position() != samplesToDuration(int64(tc.samples)) {
+			t.Fatalf("%s: %d samples, position %v, want %d", tc.name, len(got), dec.Position(), tc.samples)
+		}
+		if tc.data == nil && maxAbsDiff(got, full) != 0 {
+			t.Fatalf("%s: the trimmed decode is not a prefix of the untrimmed one", tc.name)
+		}
+		src, err := ReadPackets(bytes.NewReader(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertSamePackets(t, tc.name, dec.Source().Packets, src.Packets)
+		for i, p := range src.Packets {
+			if p.Duration != tc.duration[i] || p.Trim != tc.trim[i] {
+				t.Fatalf("%s: packet %d contributes %d and trims %d, want %d and %d", tc.name, i, p.Duration, p.Trim, tc.duration[i], tc.trim[i])
+			}
+		}
+		if tc.samples == 0 {
+			continue
+		}
+		out, err := Cut(src, Edit{Keep: []Interval{{0, src.Duration()}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pcm := decodeStream(t, out, FormatOgg); !slices.Equal(pcm, got) {
+			t.Fatalf("%s: a whole cut decodes to %d samples, want the %d of the source", tc.name, len(pcm), len(got))
+		}
+	}
+}
+
+// silencePage returns an Ogg Opus file with the given pre-skip whose only
+// audio page holds three copies of packet and ends the stream at granule.
+func silencePage(t *testing.T, packet []byte, preSkip int, granule int64) []byte {
+	t.Helper()
+	head := opus.Head{Version: 1, Channels: 1, PreSkip: preSkip, InputSampleRate: SampleRate}.Marshal()
+	return slices.Concat(
+		makeOggPage(t, 5, 0, 0x02, 0, false, head),
+		makeOggPage(t, 5, 1, 0, 0, false, opus.MarshalTags("test")),
+		makeOggPage(t, 5, 2, 0x04, granule, false, packet, packet, packet),
+	)
+}

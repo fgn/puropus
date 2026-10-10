@@ -100,11 +100,19 @@ func (r *Reader) SetBOSSelector(accept func([]byte) bool) {
 }
 
 // ReusePacketData makes Next return packet data in memory that the Reader
-// reuses: Packet.Data is valid only until the next call to Next. Reading then
-// allocates nothing per packet once the buffers have grown to the stream's
-// page size. By default every packet has its own copy.
+// reuses: Packet.Data is valid until Next reads another page, so the packets
+// of one page, those Buffered counts after its first, stay valid together.
+// Reading then allocates nothing per packet once the buffers have grown to
+// the stream's page size. By default every packet has its own copy.
 func (r *Reader) ReusePacketData() {
 	r.reuse = true
+}
+
+// Buffered returns how many more packets of the current page Next returns
+// before it reads another page. A caller that needs a page's granule
+// position before its first packet reads them all.
+func (r *Reader) Buffered() int {
+	return len(r.queue) - r.queued
 }
 
 // DroppedPages returns the number of pages discarded because their version or

@@ -495,8 +495,10 @@ func openSource(br *bufio.Reader) (packetSource, Header, error) {
 	return nil, Header{}, unsupported("container (expected Ogg or WebM)")
 }
 
-// oggSource reads the Opus stream of an Ogg file, following chained links
-// and deriving end trimming from the final granule position.
+// oggSource reads the Opus stream of an Ogg file, following chained links.
+// It reads all the packets of a page before it returns the first, so that it
+// knows the page's granule position: the end trimming of the final page
+// spreads over the page's packets (RFC 7845 §4.4).
 type oggSource struct {
 	r        *ogg.Reader
 	channels int // of the first link; chained links must match it
@@ -505,11 +507,25 @@ type oggSource struct {
 	pendingPreSkip int
 	pendingGain    int16
 	needTags       bool // a chained link's OpusTags is the next packet
+	// page holds the audio packets of the current page from pagePos on, the
+	// last ones from linkStart on in the link the page ends in; read is
+	// scratch for reading the page.
+	page      []oggPacket
+	pagePos   int
+	linkStart int
+	read      []ogg.Packet
 	// pageDuration counts the samples of the packets since the last page
 	// with a granule position; previousGranule is that position.
 	pageDuration    int64
 	previousGranule int64
 	haveGranule     bool
+}
+
+// oggPacket is an audio packet of the current page.
+type oggPacket struct {
+	data     []byte
+	meta     packetMeta
+	duration int // its coded samples, 0 when it does not parse
 }
 
 func openOgg(br *bufio.Reader) (packetSource, Header, error) {
@@ -549,70 +565,110 @@ func openOgg(br *bufio.Reader) (packetSource, Header, error) {
 func (s *oggSource) reuseData() { s.r.ReusePacketData() }
 
 func (s *oggSource) next() ([]byte, packetMeta, error) {
-	for {
-		p, err := s.r.Next()
-		if err != nil {
-			if s.needTags && errors.Is(err, io.EOF) {
-				err = io.ErrUnexpectedEOF // the input ended inside a chained link's headers
-			}
+	for s.pagePos == len(s.page) {
+		if err := s.readPage(); err != nil {
 			return nil, packetMeta{}, err
 		}
-		if p.BOS && len(p.Data) >= 8 && string(p.Data[:8]) == "OpusHead" {
-			head, err := opus.ParseHead(p.Data)
-			if err != nil {
-				return nil, packetMeta{}, fmt.Errorf("puropus: chained Ogg OpusHead: %w", err)
-			}
-			if head.Channels != s.channels {
-				return nil, packetMeta{}, unsupported("channel-count change between Ogg links (%d to %d)", s.channels, head.Channels)
-			}
-			s.pendingLink = true
-			s.pendingPreSkip = head.PreSkip
-			s.pendingGain = head.OutputGain
-			s.needTags = true
-			s.pageDuration = 0
-			s.haveGranule = false
-			continue
-		}
-		// A chained link whose OpusTags page was lost (dropped as corrupt)
-		// goes on to its audio, which is decoded, as ffmpeg n9.0.2 decodes
-		// it. openOgg still requires the first link's OpusTags, as ffmpeg
-		// does: without it the input may not be Ogg Opus.
-		s.needTags = false
-		if opus.IsTags(p.Data) {
-			continue
-		}
-		meta := packetMeta{}
-		if s.pendingLink {
-			meta.newLink = true
-			meta.preSkip = s.pendingPreSkip
-			meta.outputGain = s.pendingGain
-			s.pendingLink = false
-		}
-		parsed, perr := opus.Parse(p.Data, false)
-		if perr == nil {
-			duration := int64(parsed.Duration48())
-			s.pageDuration += duration
-			if p.GranuleKnown && p.Granule >= 0 {
-				if p.EOS {
-					// The stream's end is where the previous page's granule
-					// plus this page's packets land; a first (and only)
-					// audio page counts from 0. Anything beyond the final
-					// granule is encoder padding to trim (RFC 7845 §4.4).
-					expected := s.pageDuration
-					if s.haveGranule {
-						expected += s.previousGranule
-					}
-					if expected > p.Granule {
-						meta.trimEnd = int(min(expected-p.Granule, duration))
-					}
-				}
-				s.previousGranule = p.Granule
-				s.haveGranule = true
-				s.pageDuration = 0
-			}
-		}
-		return p.Data, meta, nil
 	}
+	p := s.page[s.pagePos]
+	s.page[s.pagePos] = oggPacket{} // the queue keeps no reference to the data
+	s.pagePos++
+	return p.data, p.meta, nil
+}
+
+// readPage reads the packets of the next page, which stay valid together
+// even with ReusePacketData, and queues its audio packets with their link
+// headers and end trimming.
+func (s *oggSource) readPage() error {
+	s.page, s.pagePos, s.linkStart = s.page[:0], 0, 0
+	p, err := s.r.Next()
+	if err != nil {
+		if s.needTags && errors.Is(err, io.EOF) {
+			err = io.ErrUnexpectedEOF // the input ended inside a chained link's headers
+		}
+		return err
+	}
+	s.read = append(s.read[:0], p)
+	for n := s.r.Buffered(); n > 0; n-- {
+		p, err := s.r.Next()
+		if err != nil {
+			return err
+		}
+		s.read = append(s.read, p)
+	}
+	for _, p := range s.read {
+		if err := s.queue(p); err != nil {
+			return err
+		}
+	}
+	last := s.read[len(s.read)-1]
+	clear(s.read) // keep no reference to the data
+	if !last.GranuleKnown || last.Granule < 0 {
+		return nil
+	}
+	// The stream's end is where the previous page's granule position plus
+	// the packets since land; a first (and only) audio page counts from 0.
+	// Anything beyond the final granule position is encoder padding to
+	// trim, from the last packet back (RFC 7845 §4.4).
+	expected := s.pageDuration
+	if s.haveGranule {
+		expected += s.previousGranule
+	}
+	if last.EOS && expected > last.Granule {
+		trim := expected - last.Granule
+		for i := len(s.page) - 1; i >= s.linkStart && trim > 0; i-- {
+			t := min(trim, int64(s.page[i].duration))
+			s.page[i].meta.trimEnd = int(t)
+			trim -= t
+		}
+	}
+	s.previousGranule = last.Granule
+	s.haveGranule = true
+	s.pageDuration = 0
+	return nil
+}
+
+// queue adds a packet of the page being read: a chained link's OpusHead
+// starts the link, its OpusTags is skipped, and an audio packet is queued.
+func (s *oggSource) queue(p ogg.Packet) error {
+	if p.BOS && len(p.Data) >= 8 && string(p.Data[:8]) == "OpusHead" {
+		head, err := opus.ParseHead(p.Data)
+		if err != nil {
+			return fmt.Errorf("puropus: chained Ogg OpusHead: %w", err)
+		}
+		if head.Channels != s.channels {
+			return unsupported("channel-count change between Ogg links (%d to %d)", s.channels, head.Channels)
+		}
+		s.pendingLink = true
+		s.pendingPreSkip = head.PreSkip
+		s.pendingGain = head.OutputGain
+		s.needTags = true
+		s.pageDuration = 0
+		s.haveGranule = false
+		s.linkStart = len(s.page)
+		return nil
+	}
+	// A chained link whose OpusTags page was lost (dropped as corrupt) goes
+	// on to its audio, which is decoded, as ffmpeg n9.0.2 decodes it.
+	// openOgg still requires the first link's OpusTags, as ffmpeg does:
+	// without it the input may not be Ogg Opus.
+	s.needTags = false
+	if opus.IsTags(p.Data) {
+		return nil
+	}
+	packet := oggPacket{data: p.Data}
+	if s.pendingLink {
+		packet.meta.newLink = true
+		packet.meta.preSkip = s.pendingPreSkip
+		packet.meta.outputGain = s.pendingGain
+		s.pendingLink = false
+	}
+	if parsed, err := opus.Parse(p.Data, false); err == nil {
+		packet.duration = parsed.Duration48()
+	}
+	s.pageDuration += int64(packet.duration)
+	s.page = append(s.page, packet)
+	return nil
 }
 
 // webmSource reads the Opus track of a WebM file, deriving end trimming from

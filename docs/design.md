@@ -109,7 +109,16 @@ from the first packets, the output gain is applied, and the result is
 optionally resampled to 16 kHz. Chained Ogg Opus links reset the codec and
 apply their own pre-skip and gain on the same output timeline; the resampler
 runs on uninterrupted. A link with a different channel count is
-`ErrUnsupported`.
+`ErrUnsupported`, which ends decoding there.
+
+The final Ogg page's granule position sets how many of its samples remain
+(RFC 7845 §4.4), so the Ogg reader reads a whole page before it returns the
+page's first packet, and the end trimming spreads over the page's packets
+from the last one back: a packet trimmed whole contributes nothing and keeps
+a `Trim` of its coded duration. ffmpeg trims the same, except for a final
+granule position below the pre-skip, which RFC 7845 §4.5 makes the stream
+invalid: puropus then returns no audio, ffmpeg the first packet after its
+pre-skip.
 
 WebM pre-skip comes from the `OpusHead` in `CodecPrivate`, with `CodecDelay`
 as a fallback when there is no `OpusHead`. The WebM reader handles
