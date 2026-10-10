@@ -59,6 +59,7 @@ type Decoder struct {
 	rsOut   []float32
 	out     []float32 // PCM ready for Read, consumed from outPos
 	outPos  int
+	links   []Header // the header of each link so far, for Source
 	packets []Packet
 	// native is kept in fixed-size blocks so retaining a long stream does not
 	// repeatedly regrow and copy one large slice; Source concatenates once.
@@ -121,6 +122,7 @@ func NewDecoder(r io.Reader, opts DecodeOptions) (*Decoder, error) {
 		channels: header.Channels,
 		preSkip:  header.PreSkip,
 		gain:     gainScale(header.OutputGain),
+		links:    []Header{header},
 		buf48:    make([]float32, opus.MaxPacketSamples*header.Channels),
 	}
 	if d.rate != SampleRate {
@@ -189,7 +191,7 @@ func (d *Decoder) Read(p []float32) (int, error) {
 // positioned on the same timeline as Position and Read, so intervals decided
 // on the decoded audio apply to them directly.
 func (d *Decoder) Source() Source {
-	return Source{Header: d.header, Packets: d.packets, Native: d.nativePCM()}
+	return Source{Header: d.header, Links: d.links, Packets: d.packets, Native: d.nativePCM()}
 }
 
 // nativePCM returns the retained native PCM: nil when it is not kept, and
@@ -231,8 +233,8 @@ func (d *Decoder) keepNative(pcm []float32) {
 // ReleasePackets drops retained packets that end at or before t, and the
 // native PCM before the first packet that remains, so a long-running stream
 // can hand each finished window to Cut and then bound its memory. Packets
-// inside the pre-skip stay as long as the packet after them does, because
-// they carry its decoder warm-up, which Cut keeps with it. Later Source calls
+// inside the pre-skip stay as long as the packet of their link after them
+// does, because they carry its decoder warm-up, which Cut keeps with it. Later Source calls
 // return only what remains; packet positions are unchanged.
 func (d *Decoder) ReleasePackets(t time.Duration) {
 	limit := durationToSamples(t)
@@ -240,7 +242,7 @@ func (d *Decoder) ReleasePackets(t time.Duration) {
 	for keep < len(d.packets) && d.packets[keep].End() <= limit {
 		keep++
 	}
-	for keep > 0 && keep < len(d.packets) && d.packets[keep-1].Duration == 0 {
+	for keep > 0 && keep < len(d.packets) && d.packets[keep-1].Duration == 0 && d.packets[keep-1].Link == d.packets[keep].Link {
 		keep--
 	}
 	if keep == 0 {
@@ -298,6 +300,7 @@ func (d *Decoder) fill() error {
 		d.preSkip = meta.preSkip
 		d.gain = gainScale(meta.outputGain)
 		d.skipped = 0
+		d.links = append(d.links, meta.linkHeader(d.header))
 	}
 
 	parsed, perr := opus.Parse(data, false)
@@ -374,7 +377,7 @@ func (d *Decoder) finishPacket(data []byte, meta packetMeta, decoded []float32) 
 	d.skipped += preSkipped
 	pcm := decoded[skip*d.channels : (skip+kept)*d.channels]
 	if d.opts.KeepPackets {
-		d.packets = append(d.packets, Packet{Data: data, Start: d.timeline, Duration: kept, Skip: skip, Trim: trim})
+		d.packets = append(d.packets, Packet{Data: data, Start: d.timeline, Duration: kept, Skip: skip, Trim: trim, Link: len(d.links) - 1})
 	}
 	if d.opts.KeepNative {
 		d.keepNative(pcm)
@@ -470,6 +473,12 @@ type packetMeta struct {
 	newLink    bool
 	preSkip    int
 	outputGain int16
+}
+
+// linkHeader returns the header of the link that meta starts, in a stream
+// whose first link has header first.
+func (meta packetMeta) linkHeader(first Header) Header {
+	return Header{Format: first.Format, Channels: first.Channels, PreSkip: meta.preSkip, OutputGain: meta.outputGain}
 }
 
 // packetSource yields the Opus packets of a container in order, and io.EOF
@@ -746,7 +755,7 @@ func ReadPackets(r io.Reader) (Source, error) {
 	if err != nil {
 		return Source{}, err
 	}
-	out := Source{Header: header}
+	out := Source{Header: header, Links: []Header{header}}
 	position := int64(0)
 	preSkip := header.PreSkip
 	skipped := 0
@@ -761,6 +770,7 @@ func ReadPackets(r io.Reader) (Source, error) {
 		if meta.newLink {
 			preSkip = meta.preSkip
 			skipped = 0
+			out.Links = append(out.Links, meta.linkHeader(header))
 		}
 		parsed, err := opus.Parse(data, false)
 		if err != nil {
@@ -768,7 +778,7 @@ func ReadPackets(r io.Reader) (Source, error) {
 		}
 		skip, preSkipped, duration, trim := packetWindow(parsed.Duration48(), meta.trimStart, preSkip-skipped, meta.trimEnd)
 		skipped += preSkipped
-		out.Packets = append(out.Packets, Packet{Data: data, Start: position, Duration: duration, Skip: skip, Trim: trim})
+		out.Packets = append(out.Packets, Packet{Data: data, Start: position, Duration: duration, Skip: skip, Trim: trim, Link: len(out.Links) - 1})
 		position += int64(duration)
 	}
 }

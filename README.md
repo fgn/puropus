@@ -118,10 +118,12 @@ Packets sit on the decoded timeline exactly as the decoder produces it: the
 first packet of a stream absorbs the pre-skip and the last one the end
 trimming (`Packet.Skip` and `Packet.Trim`), so `Source.Duration()`, the
 intervals you pass, and the spans you get back all refer to the samples a VAD
-saw. A whole-stream cut round-trips bit for bit. Where a kept packet's skipped
-or trimmed samples land inside the output (after inserted silence, or at the
-boundary of a chained Ogg stream) no container can drop them; they are
-emitted as audio and mapped as synthetic spans.
+saw. A whole-stream cut round-trips bit for bit, chained Ogg files included:
+a cut keeps each link's header and the decoder reset between links, and
+`WriteOgg` writes them as a chain (WebM, which has one header, takes them
+when their output gains agree). Where a kept packet's skipped or trimmed
+samples land inside the output (after inserted silence, say) no container
+can drop them; they are emitted as audio and mapped as synthetic spans.
 
 Silence is added only around regions that keep packets, and it really is
 silence: the inserted frames are CELT frames carrying only the silence flag,

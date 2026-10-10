@@ -139,6 +139,12 @@ func inspect(args []string) error {
 	fmt.Printf("format: %v\nchannels: %d\npre-skip: %d samples\noutput gain: %d (Q7.8 dB)\npackets: %d\nduration: %v\nbitrate: %s\n",
 		src.Header.Format, src.Header.Channels, src.Header.PreSkip, src.Header.OutputGain, len(src.Packets), duration,
 		formatBitrate(bytes, duration))
+	if len(src.Links) > 1 {
+		fmt.Printf("chained links: %d\n", len(src.Links))
+		for i, h := range src.Links {
+			fmt.Printf("  link %d: pre-skip %d samples, output gain %d (Q7.8 dB)\n", i, h.PreSkip, h.OutputGain)
+		}
+	}
 	fmt.Printf("modes: silk=%d hybrid=%d celt=%d\n", modes[opus.ModeSILK], modes[opus.ModeHybrid], modes[opus.ModeCELT])
 	fmt.Printf("bandwidths: nb=%d mb=%d wb=%d swb=%d fb=%d\n", bandwidths[opus.BandwidthNarrowband], bandwidths[opus.BandwidthMediumband],
 		bandwidths[opus.BandwidthWideband], bandwidths[opus.BandwidthSuperWideband], bandwidths[opus.BandwidthFullband])

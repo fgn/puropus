@@ -250,8 +250,9 @@ edges that the container discards (`Skip` for pre-skip, `Trim` for an Ogg
 final granule or WebM `DiscardPadding`), so packets tile the timeline from 0
 and `Source.Duration()` is exactly what `Read` delivers. A packet that lies
 entirely inside the pre-skip contributes nothing. Chained Ogg links continue
-the same timeline, the boundary marked by the first link's `Trim` and the
-second's `Skip`. `Source.Native`, when kept, starts at `Packets[0].Start`, and
+the same timeline: `Packet.Link` numbers each packet's link and
+`Source.Links` holds each link's header, so the boundary, where the decoder
+resets and the next link's gain applies, survives a cut. `Source.Native`, when kept, starts at `Packets[0].Start`, and
 `ReleasePackets` drops native PCM only up to the first packet it retains, so
 the two never drift apart. A kept `Source.Native` is not nil even when the
 packets decode to nothing, so `Cut` can tell that case from PCM that was
@@ -272,15 +273,32 @@ encoder receives whole Opus frames; the `Encoder` contract makes the
 implementation responsible for its own algorithmic delay, since only it knows
 the delay and its frame sizes.
 
-Selected packets are laid on a fresh continuous timeline. Pre-skip survives
-only on the leading packets of the output and end trimming only on its last
-packet, because that is all Ogg and WebM can express; the writers put them in
-`OpusHead`, `CodecDelay`, the final granule position, and a `DiscardPadding`
-on the last block. Skipped or trimmed samples anywhere else (a source's first
-packet after inserted silence, its last packet before trailing silence, a
-chained-link boundary) are emitted as audio and mapped as synthetic spans:
-they are the encoder's warm-up or padding, so the timeline stays exact at the
-cost of a few milliseconds of near-silence.
+Selected packets are laid on a fresh continuous timeline, in output links:
+the packets of each source link that a selection keeps go to a link of
+their own, with that link's output gain, and packets of one link joined from
+two regions stay in one. Pre-skip survives only on the leading packets of
+an output link and end trimming only on its last packet, because that is
+what an Ogg link can express (its `OpusHead` and its final granule
+position); `WriteOgg` writes the links as a chained stream with a serial
+number each, so a whole cut of a chained file decodes exactly as the file
+does. Silence before the first region belongs to its link, silence between
+regions to the link before it, so a link that starts after silence starts
+with its own first packet. Skipped or trimmed samples anywhere else (a
+source's first packet after inserted silence, its last packet before
+trailing silence, a negative WebM `DiscardPadding` inside a link) are
+emitted as audio and mapped as synthetic spans: they are the encoder's
+warm-up or padding, so the timeline stays exact at the cost of a few
+milliseconds of near-silence.
+
+WebM has one track header and no decoder reset. `WriteWebM` writes the first
+link's pre-skip as `CodecDelay` and in the `OpusHead`, and every other
+`Skip` or `Trim` as a `DiscardPadding` on its block, negative for a `Skip`;
+so it writes a cut of a chained file whose links share their output gain,
+the decoder carrying its state across the boundary, and refuses links with
+different gains (`ErrUnsupported`), as it refuses a packet with both a
+`Skip` and a `Trim` after the pre-skip, which one `DiscardPadding` cannot
+express. Links always share their channel count (a change of it stops
+decoding) and channel mapping family 0, the only one puropus reads.
 
 Every region that selects packets contributes a `Span` recording where its
 output came from, so a consumer can map transcript timestamps back to the

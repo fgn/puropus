@@ -83,8 +83,8 @@ type Edit struct {
 // Span maps a stretch of the output timeline back to the input. Synthetic
 // spans have no input position: inserted silence, and the encoder warm-up
 // or padding of a kept packet whose pre-skip or end trimming could not be
-// expressed because the packet is not at the corresponding end of the
-// output.
+// expressed because the packet is not at the corresponding end of an
+// output link.
 type Span struct {
 	Out       time.Duration
 	In        time.Duration
@@ -93,11 +93,26 @@ type Span struct {
 }
 
 // Stream is the result of a Cut: packets on a continuous timeline starting at
-// zero, with the header they are to be written under and the map back to the
-// source. The pre-skip of the output is carried by its leading packets and
-// the end trimming by its last one; no other packet has Skip or Trim.
+// zero, with the headers they are to be written under and the map back to
+// the source.
+//
+// A Stream has a link for each stretch of packets that came from one link of
+// a chained Ogg source, in order, and one link for any other source. Each
+// link keeps its source link's output gain; its pre-skip is carried by its
+// leading packets and its end trimming by its last one, and Cut gives no
+// other packet a Skip or Trim. WriteOgg writes the links as a chained Ogg
+// stream, so a decoder resets between them as it did in the source. WebM has
+// no links: WriteWebM writes a Stream whose links share their output gain as
+// one track, a later link's pre-skip and an earlier link's end trimming as
+// DiscardPadding, and the decoder does not reset between them.
 type Stream struct {
-	Header  Header
+	// Header is the stream's, with the pre-skip and output gain of its
+	// first link.
+	Header Header
+	// Links holds each link's header, its PreSkip the Skip of its leading
+	// packets, for Packet.Link to index; Cut fills it. A Stream with no
+	// Links has one link, with Header.
+	Links   []Header
 	Packets []Packet
 	Spans   []Span
 }
@@ -124,23 +139,6 @@ func (s *Stream) InputTime(out time.Duration) (time.Duration, bool) {
 	return 0, false
 }
 
-// edges returns the pre-skip and end trimming the stream is written with.
-// Skipped or trimmed samples elsewhere cannot be expressed in either
-// container; Cut never produces them.
-func (s *Stream) edges() (preSkip, trim int, err error) {
-	for i, p := range s.Packets {
-		if i > 0 && p.Skip > 0 && s.Packets[i-1].Duration > 0 {
-			return 0, 0, fmt.Errorf("puropus: packet %d skips %d samples inside the stream", i, p.Skip)
-		}
-		if p.Trim > 0 && i < len(s.Packets)-1 {
-			return 0, 0, fmt.Errorf("puropus: packet %d trims %d samples inside the stream", i, p.Trim)
-		}
-		preSkip += p.Skip
-		trim = p.Trim
-	}
-	return preSkip, trim, nil
-}
-
 // region is a half-open sample range on the source timeline.
 type region struct {
 	start, end int64
@@ -155,6 +153,16 @@ func Cut(src Source, edit Edit) (*Stream, error) {
 	}
 	if len(src.Packets) == 0 {
 		return nil, fmt.Errorf("puropus: source has no packets")
+	}
+	for i, p := range src.Packets {
+		if p.Link < 0 || p.Link >= max(len(src.Links), 1) {
+			return nil, fmt.Errorf("puropus: packet %d belongs to link %d of %d", i, p.Link, max(len(src.Links), 1))
+		}
+	}
+	for i, h := range src.Links {
+		if h.Channels != src.Header.Channels {
+			return nil, fmt.Errorf("puropus: link %d has %d channels, the stream %d", i, h.Channels, src.Header.Channels)
+		}
 	}
 	window := region{src.Packets[0].Start, src.Packets[len(src.Packets)-1].End()}
 	if edit.Snap == SnapExact {
@@ -187,6 +195,10 @@ func Cut(src Source, edit Edit) (*Stream, error) {
 		gap := edit.Silence.Between
 		if kept == 0 {
 			gap = edit.Silence.Leading
+			// Leading silence belongs to the first region's link; silence
+			// between regions to the link before it, so that the next
+			// region, if it starts a link, starts with its own packets.
+			b.startLink(packets[0].Link)
 		}
 		if gap > 0 {
 			if err := b.silence(gap, b.bandwidthNear(reg.start)); err != nil {
@@ -205,7 +217,11 @@ func Cut(src Source, edit Edit) (*Stream, error) {
 		}
 	}
 	out := &Stream{Header: src.Header, Packets: b.packets, Spans: b.spans}
-	out.Header.PreSkip = b.preSkip
+	out.Header.PreSkip = 0
+	if len(b.links) > 0 {
+		out.Header = b.links[0]
+		out.Links = b.links
+	}
 	return out, nil
 }
 
@@ -280,23 +296,47 @@ type builder struct {
 	packets  []Packet
 	spans    []Span
 	cursor   int64
-	preSkip  int // Skip carried by the leading packets
 	hint     int // source packets before this index are settled
+	// links holds the output links' headers, the last one's PreSkip still
+	// growing; srcLink is the source link of the last, and audible reports
+	// whether that link has a packet that contributes samples yet.
+	links   []Header
+	srcLink int
+	audible bool
 }
 
-// push appends p at the cursor. Its pre-skip survives only at the head of the
-// output and its end trimming only until another packet follows; anywhere
-// else the container has no way to drop those samples, so they are emitted
-// as audio and mapped as synthetic.
+// startLink starts an output link for the source link srcLink.
+func (b *builder) startLink(srcLink int) {
+	h := b.src.Header
+	if srcLink < len(b.src.Links) {
+		h = b.src.Links[srcLink]
+	}
+	h.PreSkip = 0
+	b.links = append(b.links, h)
+	b.srcLink = srcLink
+	b.audible = false
+}
+
+// push appends p at the cursor, in a new output link when it comes from
+// another source link than the packet before it. Its pre-skip survives only
+// at the head of its output link and its end trimming only until another
+// packet of the link follows; anywhere else the container has no way to
+// drop those samples, so they are emitted as audio and mapped as synthetic.
 func (b *builder) push(p Packet) {
-	b.settleTrim()
-	out := Packet{Data: p.Data, Start: b.cursor, Duration: p.Duration, Skip: p.Skip, Trim: p.Trim}
-	if p.Skip > 0 && b.cursor > 0 {
+	if len(b.links) == 0 || p.Link != b.srcLink {
+		b.startLink(p.Link) // the link before keeps its end trimming
+	} else {
+		b.settleTrim()
+	}
+	link := len(b.links) - 1
+	out := Packet{Data: p.Data, Start: b.cursor, Duration: p.Duration, Skip: p.Skip, Trim: p.Trim, Link: link}
+	if p.Skip > 0 && b.audible {
 		b.synthetic(int64(p.Skip))
 		out.Duration += p.Skip
 		out.Skip = 0
 	}
-	b.preSkip += out.Skip
+	b.links[link].PreSkip += out.Skip
+	b.audible = b.audible || out.Duration > 0
 	if p.Duration > 0 {
 		b.appendSpan(Span{Out: samplesToDuration(b.cursor), In: samplesToDuration(p.Start), Length: samplesToDuration(int64(p.Duration))})
 		b.cursor += int64(p.Duration)
@@ -338,9 +378,8 @@ func (b *builder) appendSpan(s Span) {
 	b.spans = append(b.spans, s)
 }
 
-// bandwidthNear returns the Opus bandwidth of the packet covering sample pos,
-// so synthesized silence matches its neighbours.
-func (b *builder) bandwidthNear(pos int64) opus.Bandwidth {
+// packetAt returns the source packet covering sample pos, or the last one.
+func (b *builder) packetAt(pos int64) Packet {
 	i, _ := slices.BinarySearchFunc(b.src.Packets, pos, func(p Packet, pos int64) int {
 		if p.End() <= pos {
 			return -1
@@ -350,14 +389,21 @@ func (b *builder) bandwidthNear(pos int64) opus.Bandwidth {
 		}
 		return 0
 	})
-	if i >= len(b.src.Packets) {
-		i = len(b.src.Packets) - 1
-	}
-	if parsed, err := opus.Parse(b.src.Packets[i].Data, false); err == nil {
+	return b.src.Packets[min(i, len(b.src.Packets)-1)]
+}
+
+// bandwidthNear returns the Opus bandwidth of the packet covering sample pos,
+// so synthesized silence matches its neighbours.
+func (b *builder) bandwidthNear(pos int64) opus.Bandwidth {
+	if parsed, err := opus.Parse(b.packetAt(pos).Data, false); err == nil {
 		return parsed.Bandwidth
 	}
 	return opus.BandwidthFullband
 }
+
+// linkAt returns the source link of the audio at sample pos, for the
+// packets that re-encode it.
+func (b *builder) linkAt(pos int64) int { return b.packetAt(pos).Link }
 
 // silence appends d of synthesized silence at the cursor, coded at the
 // given bandwidth.
@@ -374,16 +420,17 @@ func (b *builder) silence(d time.Duration, bandwidth opus.Bandwidth) error {
 		}
 		start := b.cursor
 		b.synthetic(int64(parsed.Duration48()))
-		b.packets = append(b.packets, Packet{Data: data, Start: start, Duration: parsed.Duration48()})
+		b.packets = append(b.packets, Packet{Data: data, Start: start, Duration: parsed.Duration48(), Link: len(b.links) - 1})
 	}
+	b.audible = true
 	return nil
 }
 
 // selectPackets returns the source packets a region keeps: those overlapping
-// it, or lying inside it when inward. A kept packet at the start of the
-// source brings the packets before it that lie entirely inside the pre-skip,
-// so the decoder warm-up they carry is kept with it. Regions are disjoint
-// and sorted, so no packet is selected twice.
+// it, or lying inside it when inward. A kept packet brings the packets of its
+// link before it that lie entirely inside the pre-skip, so the decoder
+// warm-up they carry is kept with it. Regions are disjoint and sorted, so no
+// packet is selected twice.
 func (b *builder) selectPackets(reg region, inward bool) []Packet {
 	packets := b.src.Packets
 	i := b.hint
@@ -395,7 +442,7 @@ func (b *builder) selectPackets(reg region, inward bool) []Packet {
 		i++
 	}
 	after := i
-	for first > b.hint && first < after && packets[first-1].Duration == 0 {
+	for first > b.hint && first < after && packets[first-1].Duration == 0 && packets[first-1].Link == packets[first].Link {
 		first--
 	}
 	b.hint = max(b.hint, after)
@@ -462,7 +509,7 @@ func (b *builder) encode(start, end int64) ([]Packet, error) {
 		if err != nil {
 			return nil, fmt.Errorf("puropus: encoder produced an invalid packet: %w", err)
 		}
-		packets = append(packets, Packet{Data: data, Start: pos, Duration: parsed.Duration48()})
+		packets = append(packets, Packet{Data: data, Start: pos, Duration: parsed.Duration48(), Link: b.linkAt(pos)})
 		pos += int64(parsed.Duration48())
 	}
 	if pos != end {

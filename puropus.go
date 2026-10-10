@@ -46,8 +46,9 @@ type Header struct {
 	Channels int
 	// PreSkip is the number of 48 kHz samples the container drops from the
 	// start of the decoded audio: the OpusHead pre-skip, or WebM CodecDelay
-	// when there is no OpusHead. On a Stream it is the pre-skip of the
-	// output, the Skip of its leading packets.
+	// when there is no OpusHead. In the Links of a chained Ogg stream it is
+	// each link's own. On a Stream it is the pre-skip of the output link,
+	// the Skip of the link's leading packets.
 	PreSkip int
 	// OutputGain is the Q7.8 dB gain from the stream header, applied to
 	// decoded PCM.
@@ -57,8 +58,9 @@ type Header struct {
 // Packet is one Opus packet on the decoded timeline, in 48 kHz samples.
 // Start and Duration are the samples the packet contributes to that
 // timeline; Skip and Trim are the coded samples at its edges that the
-// container discards: the stream's pre-skip, and the end trimming of an Ogg
-// final granule position or a WebM DiscardPadding. Packets tile the
+// container discards: the stream's (or link's) pre-skip and a WebM block's
+// negative DiscardPadding at the start, the end trimming of an Ogg final
+// granule position or a positive DiscardPadding at the end. Packets tile the
 // timeline, so each one starts where the previous one ends, and a packet
 // that lies entirely inside the pre-skip contributes nothing.
 type Packet struct {
@@ -67,6 +69,11 @@ type Packet struct {
 	Duration int
 	Skip     int
 	Trim     int
+	// Link numbers the chained Ogg link the packet belongs to: it indexes
+	// the Links of its Source or Stream, and is 0 for every packet of a
+	// stream of one link. Where it changes, a new link starts, which a
+	// decoder decodes afresh with that link's header.
+	Link int
 }
 
 // End returns the sample position just past the packet's contribution.
@@ -90,7 +97,14 @@ type Interval struct {
 // Source is what Cut operates on: a stream's header and packets, optionally
 // with the decoded 48 kHz PCM for exact boundaries.
 type Source struct {
-	Header  Header
+	// Header is the stream's: its format and channels, and the pre-skip and
+	// output gain of its first link.
+	Header Header
+	// Links holds the header of each link of a chained Ogg stream, in order
+	// and from the first, for Packet.Link to index: Decoder.Source and
+	// ReadPackets fill it for every stream, with one entry when there is
+	// one link. A Source with no Links has one link, with Header.
+	Links   []Header
 	Packets []Packet
 	// Native holds the decoded 48 kHz interleaved PCM of Packets before
 	// output gain, starting at Packets[0].Start and covering every packet.

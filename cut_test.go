@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -341,29 +342,109 @@ func TestCutFoldsInteriorSkipAndTrimIntoSyntheticSpans(t *testing.T) {
 	}
 }
 
-// A cut across the boundary of a chained Ogg stream keeps both links on one
-// timeline; the first link's padding and the second link's pre-skip become a
-// synthetic stretch between them.
-func TestCutAcrossChainedLinks(t *testing.T) {
-	a := readFixture(t, "ogg-celt-fb.opus")
-	b := readFixture(t, "ogg-silk-wb.opus")
-	chained := append(append([]byte(nil), a...), b...)
-	src, err := ReadPackets(bytes.NewReader(chained))
-	if err != nil {
-		t.Fatal(err)
+// chainedOgg chains links: each is a fixture's packets with its pre-skip,
+// end trimming and the given output gain, written as an Ogg link.
+func chainedOgg(t *testing.T, gains []int16, names ...string) []byte {
+	t.Helper()
+	var chain bytes.Buffer
+	for i, name := range names {
+		src := sourceFor(t, name)
+		s := &Stream{Header: src.Header, Packets: src.Packets}
+		s.Header.OutputGain = gains[i]
+		if err := s.WriteOgg(&chain); err != nil {
+			t.Fatal(err)
+		}
 	}
-	out, err := Cut(src, Edit{Keep: []Interval{{0, src.Duration()}}})
-	if err != nil {
-		t.Fatal(err)
+	return chain.Bytes()
+}
+
+// A cut of a chained Ogg stream keeps its links: the packets of each source
+// link go to a link of their own, with that link's output gain, its pre-skip
+// on its leading packets and its end trimming on its last, so WriteOgg
+// writes a chain whose decoder resets where the source's did. A whole cut
+// therefore decodes exactly as the source, gains of 0 and +6 dB included
+// (it used to lose the second link's gain and reset: 48% RMS error), and
+// the span map has no synthetic stretch at the boundary. A cut across the
+// boundary starts the second link at its own first packet. WebM cannot
+// carry two gains, so writing that cut as WebM fails; with equal gains it
+// is written, the second link's pre-skip and the first one's end trimming
+// as DiscardPadding, with no decoder reset between them.
+func TestCutKeepsChainedLinks(t *testing.T) {
+	for _, gains := range [][]int16{{0, 0}, {0, 6 * 256}} {
+		chained := chainedOgg(t, gains, "ogg-celt-fb.opus", "ogg-silk-wb.opus")
+		direct, dec := decodeAll(t, bytes.NewReader(chained), DecodeOptions{KeepPackets: true})
+		src, err := ReadPackets(bytes.NewReader(chained))
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertSamePackets(t, "Source", dec.Source().Packets, src.Packets)
+		if !slices.Equal(dec.Source().Links, src.Links) {
+			t.Fatalf("Decoder links %+v, ReadPackets links %+v", dec.Source().Links, src.Links)
+		}
+		if len(src.Links) != 2 || src.Links[1].OutputGain != gains[1] || src.Links[1].PreSkip != 312 || src.Links[0] != src.Header {
+			t.Fatalf("source links %+v", src.Links)
+		}
+		boundary := len(sourceFor(t, "ogg-celt-fb.opus").Packets)
+		if src.Packets[boundary-1].Link != 0 || src.Packets[boundary].Link != 1 {
+			t.Fatalf("link numbers %d, %d at the boundary", src.Packets[boundary-1].Link, src.Packets[boundary].Link)
+		}
+
+		whole, err := Cut(src, Edit{Keep: []Interval{{0, src.Duration()}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertSpans(t, whole, []Span{{Out: 0, In: 0, Length: 6000 * ms}})
+		if len(whole.Links) != 2 || whole.Links[0].PreSkip != 312 || whole.Links[1].PreSkip != 312 || whole.Links[1].OutputGain != gains[1] {
+			t.Fatalf("output links %+v", whole.Links)
+		}
+		if pcm := decodeStream(t, whole, FormatOgg); !slices.Equal(pcm, direct) {
+			t.Fatalf("gains %v: a whole cut written as Ogg decodes to %d samples, differing by %g", gains, len(pcm), maxAbsDiff(pcm, direct))
+		}
+
+		across, err := Cut(src, Edit{Keep: []Interval{{2500 * ms, 3500 * ms}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(across.Links) != 2 || across.Links[0].PreSkip != 0 || across.Links[1].PreSkip != 312 {
+			t.Fatalf("links of a cut across the boundary %+v", across.Links)
+		}
+		if in, ok := across.InputTime(across.Duration() - ms); !ok || in != across.Spans[len(across.Spans)-1].In+across.Spans[len(across.Spans)-1].Length-ms {
+			t.Fatalf("InputTime at the end: %v, %v", in, ok)
+		}
+		pcm := decodeStream(t, across, FormatOgg)
+		if int64(len(pcm)) != durationToSamples(across.Duration()) {
+			t.Fatalf("the cut across decodes to %d samples for %v", len(pcm), across.Duration())
+		}
+		// The second link decodes as in the source: reset, its gain applied.
+		second := durationToSamples(3000*ms) - durationToSamples(across.Spans[0].In)
+		if d := maxAbsDiff(pcm[second:], direct[3000*48:]); d != 0 {
+			t.Fatalf("gains %v: the second link differs by %g", gains, d)
+		}
+
+		var buf bytes.Buffer
+		err = whole.WriteWebM(&buf)
+		if gains[1] != 0 {
+			if !errors.Is(err, ErrUnsupported) {
+				t.Fatalf("WebM output of two gains: %v", err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		webmPCM, _ := decodeAll(t, bytes.NewReader(buf.Bytes()), DecodeOptions{})
+		if len(webmPCM) != len(direct) || maxAbsDiff(webmPCM[:3000*48], direct) != 0 {
+			t.Fatalf("WebM output: %d samples, first link differs by %g", len(webmPCM), maxAbsDiff(webmPCM[:3000*48], direct))
+		}
+		webmSrc, err := ReadPackets(bytes.NewReader(buf.Bytes()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		first, next := webmSrc.Packets[boundary-1], webmSrc.Packets[boundary]
+		if first.Trim != src.Packets[boundary-1].Trim || next.Skip != 312 || first.Trim == 0 {
+			t.Fatalf("WebM boundary packets %+v %+v", first, next)
+		}
 	}
-	srcA := sourceFor(t, "ogg-celt-fb.opus")
-	srcB := sourceFor(t, "ogg-silk-wb.opus")
-	gap := samplesToDuration(int64(srcA.Packets[len(srcA.Packets)-1].Trim + srcB.Packets[0].Skip))
-	assertSpans(t, out, []Span{
-		{Out: 0, In: 0, Length: 3000 * ms},
-		{Out: 3000 * ms, Length: gap, Synthetic: true},
-		{Out: 3000*ms + gap, In: 3000 * ms, Length: 3000 * ms},
-	})
 }
 
 func TestCutRejectsBadInput(t *testing.T) {
@@ -575,7 +656,7 @@ func assertSpans(t *testing.T, out *Stream, want []Span) {
 	if end := want[len(want)-1]; out.Duration() != end.Out+end.Length {
 		t.Fatalf("duration %v, spans end at %v", out.Duration(), end.Out+end.Length)
 	}
-	if _, _, err := out.edges(); err != nil {
+	if _, err := out.links(true); err != nil {
 		t.Fatal(err)
 	}
 }

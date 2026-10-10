@@ -280,8 +280,8 @@ func TestTolerantRecoversFromFEC(t *testing.T) {
 	for _, c := range tolerantFECCases(t) {
 		t.Run(c.Name, func(t *testing.T) {
 			stream := decodeLogStream(t, c)
-			if preSkip, trim, err := stream.edges(); err != nil || preSkip != c.Skip || trim != c.Trim {
-				t.Fatalf("stream pre-skip %d and trimming %d, the reference %d and %d (%v)", preSkip, trim, c.Skip, c.Trim, err)
+			if links, err := stream.links(true); err != nil || len(links) != 1 || links[0].preSkip != c.Skip || links[0].trim != c.Trim {
+				t.Fatalf("stream links %+v, the reference has pre-skip %d and trimming %d (%v)", links, c.Skip, c.Trim, err)
 			}
 			fec := 0
 			drop := c.dropped(t)

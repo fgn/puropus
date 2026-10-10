@@ -521,10 +521,10 @@ func TestDecodeChainedOggWithLostEOSPage(t *testing.T) {
 	}
 }
 
-// Cut sees the file with a lost EOS page on one timeline too. The first
-// link's last packet has nothing left to trim, so only the second link's
-// pre-skip becomes a synthetic stretch between them, and the first link's
-// audio is copied exactly.
+// Cut sees the file with a lost EOS page on one timeline too, with its two
+// links, so a whole cut decodes exactly as the file does: the first link's
+// last packet has nothing left to trim, and the second link keeps its
+// pre-skip.
 func TestCutChainedOggWithLostEOSPage(t *testing.T) {
 	a := readFixture(t, "ogg-celt-fb.opus")
 	b := readFixture(t, "ogg-silk-wb.opus")
@@ -545,15 +545,12 @@ func TestCutChainedOggWithLostEOSPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	skip := samplesToDuration(312)
-	assertSpans(t, out, []Span{
-		{Out: 0, In: 0, Length: samplesToDuration(linkA)},
-		{Out: samplesToDuration(linkA), Length: skip, Synthetic: true},
-		{Out: samplesToDuration(linkA) + skip, In: samplesToDuration(linkA), Length: 3000 * ms},
-	})
-	pcm := decodeStream(t, out, FormatOgg)
-	if int64(len(pcm)) != durationToSamples(out.Duration()) || maxAbsDiff(pcm[:linkA], direct) != 0 {
-		t.Fatalf("cut decodes to %d samples for %v, first link differs by %g", len(pcm), out.Duration(), maxAbsDiff(pcm[:linkA], direct))
+	assertSpans(t, out, []Span{{Out: 0, In: 0, Length: src.Duration()}})
+	if len(out.Links) != 2 || out.Links[1].PreSkip != 312 {
+		t.Fatalf("output links %+v", out.Links)
+	}
+	if pcm := decodeStream(t, out, FormatOgg); !slices.Equal(pcm, direct) {
+		t.Fatalf("cut decodes to %d samples, differing by %g", len(pcm), maxAbsDiff(pcm, direct))
 	}
 }
 
@@ -565,7 +562,7 @@ func assertSamePackets(t *testing.T, name string, got, want []Packet) {
 	}
 	for i := range want {
 		g, w := got[i], want[i]
-		if !bytes.Equal(g.Data, w.Data) || g.Start != w.Start || g.Duration != w.Duration || g.Skip != w.Skip || g.Trim != w.Trim {
+		if !bytes.Equal(g.Data, w.Data) || g.Start != w.Start || g.Duration != w.Duration || g.Skip != w.Skip || g.Trim != w.Trim || g.Link != w.Link {
 			t.Fatalf("%s: packet %d is %+v, want %+v", name, i, g, w)
 		}
 	}
