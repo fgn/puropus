@@ -10,6 +10,17 @@ import (
 // ReusePacketData must return the same packets and error.
 func FuzzReader(f *testing.F) {
 	f.Add(singlePacketStream(f, 1, []byte("OpusHead")))
+	// Grouped streams with a packet spanning pages around a page of the
+	// other stream, then a second link that starts without an EOS page.
+	f.Add(bytes.Join([][]byte{
+		pageSpec{serial: 1, flags: FlagBOS, pieces: [][]byte{[]byte("head")}}.bytes(f),
+		pageSpec{serial: 2, flags: FlagBOS, pieces: [][]byte{[]byte("other")}}.bytes(f),
+		pageSpec{serial: 1, sequence: 1, granule: 960, pieces: [][]byte{spanningPacket(255)}, open: true}.bytes(f),
+		pageSpec{serial: 2, sequence: 1, granule: 960, pieces: [][]byte{filler(20, 2)}}.bytes(f),
+		pageSpec{serial: 1, sequence: 2, flags: FlagContinued, granule: 1920, pieces: [][]byte{[]byte("rest")}}.bytes(f),
+		pageSpec{serial: 3, flags: FlagBOS, pieces: [][]byte{[]byte("head")}}.bytes(f),
+		pageSpec{serial: 3, sequence: 1, flags: FlagEOS, granule: 960, pieces: [][]byte{[]byte("next")}}.bytes(f),
+	}, nil))
 	f.Add([]byte("OggS"))
 	f.Add([]byte{})
 	f.Fuzz(func(t *testing.T, data []byte) {
