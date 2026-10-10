@@ -4,7 +4,7 @@
   "build": "generic: libopus 1.5.2 compiled from source by tools/libopus-ref/Makefile with GENERIC=1 (float, no intrinsics, no run-time CPU detection, -ffp-contract=off)",
   "generic_library_sha256": "96d73d7c4c0992177d57d31739243d21a20e65cab0697e67681d263adf6cae57",
   "decode_float_c_sha256": "7dca1c16f247f37e68798ab827630ed8074136a36be40ac9e45e9800408748fc",
-  "script_sha256": "f40079922b359964018163395d9c0317aca08c269afd046de6368560e85ffd91",
+  "script_sha256": "6d224e81d0ede7bc2e29dee45bf5fc97fd4918d228fc8e8b0e508847e623eb11",
   "compiler": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
   "command": "make -C tools/libopus-ref decode-logs (tools/libopus-ref/decode-logs.sh)",
   "log": "<name>.txt: decode_float -log of the generic build, after one header line: index kind bytes samples final-range fnv1a64. kind is packet, lost (concealed: opus_decode_float(st, NULL, 0, pcm, n, 0)) or fec (opus_decode_float(st, next, len, pcm, n, 1) with the next record); n is the duration of a dropped packet, or the range field of an empty record. fnv1a64 hashes the record's interleaved float32 little-endian output.",
@@ -12,6 +12,7 @@
   "drop": "records lost as well as the empty ones, each concealed or recovered for its own packet's duration (decode_float -drop)",
   "fec": "off: losses concealed; lbrr: a lost record whose next record is received and carries LBRR data (opus_packet_has_lbrr, first frame over one byte) decoded with decode_fec = 1; always: every lost record whose next record is received decoded with decode_fec = 1",
   "default_build_pcm_differs": "records whose PCM hash differs when the default build ($OPUS_BUILD/libopus.a, SIMD kernels) decodes the case; their kinds, sample counts and final ranges are the same",
+  "official": "official.txt (written when OPUS_TEST_VECTORS is set): the RFC 8251 vectors with every range field cleared and the records i with i % 7 in {2, 4, 5} dropped, decoded by the generic build with -fec always to one and two channels; per vector and channel count the record, lost and FEC counts, the SHA-256 of the -log output and of its first five columns",
   "cases": [
     {
       "name": "ogg-silk-nb",

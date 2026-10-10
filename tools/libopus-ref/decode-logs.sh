@@ -22,6 +22,13 @@
 # whenever the next record is received (opus_demo with in-band FEC). See
 # decode_float.c.
 #
+# With OPUS_TEST_VECTORS set to the RFC 8251 vectors (opus_newvectors), it
+# also writes official.txt: the vectors with their range fields cleared and
+# the records i with i % 7 in {2, 4, 5} lost, decoded with -fec always to one
+# and two channels, as one line per vector and channel count with the
+# SHA-256 of the log and of the log without its PCM hashes (the logs are too
+# large to commit).
+#
 # The script checks that the default build's decode of every fixture without
 # losses reproduces the fixture's committed golden byte for byte, so the
 # packet lists are the fixtures, and decodes every case with the default
@@ -179,6 +186,21 @@ splice_list() {
 	xxd -r -p "$tmp/splice.hex" >"$2"
 }
 
+# strip_ranges in out: copies a packet list with its range fields cleared,
+# and prints the number of records.
+strip_ranges() {
+	xxd -p "$1" | tr -d '\n' | awk '{
+		for (pos = 1; pos < length($0); pos += n) {
+			len = 0
+			for (k = 0; k < 8; k++) len = len * 16 + index("0123456789abcdef", substr($0, pos + k, 1)) - 1
+			n = 16 + 2 * len
+			print substr($0, pos, 8) "00000000" substr($0, pos + 16, 2 * len)
+		}
+	}' >"$tmp/strip.hex"
+	xxd -r -p "$tmp/strip.hex" >"$2"
+	wc -l <"$tmp/strip.hex"
+}
+
 # segments_json segments: the splice as a JSON array.
 segments_json() {
 	for seg in $1; do
@@ -250,6 +272,21 @@ echo "$cases" | while read -r name source channels drop fec; do
 	echo "$name: $(wc -l <"$tmp/generic.txt") records, $differs differ between the builds" >&2
 done
 
+if [ -n "${OPUS_TEST_VECTORS:-}" ]; then
+	{
+		echo "# tools/libopus-ref/decode_float ($libopus, generic build) -c N -drop <i % 7 in 2,4,5> -fec always on the RFC 8251 vectors with their range fields cleared: name channels records lost fec log-sha256 log-without-pcm-hashes-sha256"
+		for n in 01 02 03 04 05 06 07 08 09 10 11 12; do
+			records=$(strip_ranges "$OPUS_TEST_VECTORS/testvector$n.bit" "$tmp/official.bit")
+			drop=$(awk -v n="$records" 'BEGIN { for (i = 0; i < n; i++) if (i % 7 == 2 || i % 7 == 4 || i % 7 == 5) printf "%s%d", (s++ ? "," : ""), i }')
+			for channels in 1 2; do
+				"$generic" -c "$channels" -drop "$drop" -fec always -log "$tmp/official.txt" "$tmp/official.bit" "$tmp/official.f32le" 2>/dev/null
+				echo "testvector$n.bit $channels $(wc -l <"$tmp/official.txt") $(awk '$2 == "lost"' "$tmp/official.txt" | wc -l)" \
+					"$(awk '$2 == "fec"' "$tmp/official.txt" | wc -l) $(sha "$tmp/official.txt") $(cut -d' ' -f1-5 "$tmp/official.txt" | sha -)"
+			done
+		done
+	} >"$out/official.txt"
+fi
+
 jq -n --arg libopus "$libopus" --arg cc "$(cc --version | head -n 1)" \
 	--arg lib "$(sha "$here/build/generic/libopus.a")" --arg tool "$(sha "$here/decode_float.c")" \
 	--arg script "$(sha "$here/decode-logs.sh")" --slurpfile cases "$tmp/cases.json" '{
@@ -266,6 +303,7 @@ jq -n --arg libopus "$libopus" --arg cc "$(cc --version | head -n 1)" \
 	drop: "records lost as well as the empty ones, each concealed or recovered for its own packet'"'"'s duration (decode_float -drop)",
 	fec: "off: losses concealed; lbrr: a lost record whose next record is received and carries LBRR data (opus_packet_has_lbrr, first frame over one byte) decoded with decode_fec = 1; always: every lost record whose next record is received decoded with decode_fec = 1",
 	default_build_pcm_differs: "records whose PCM hash differs when the default build ($OPUS_BUILD/libopus.a, SIMD kernels) decodes the case; their kinds, sample counts and final ranges are the same",
+	official: "official.txt (written when OPUS_TEST_VECTORS is set): the RFC 8251 vectors with every range field cleared and the records i with i % 7 in {2, 4, 5} dropped, decoded by the generic build with -fec always to one and two channels; per vector and channel count the record, lost and FEC counts, the SHA-256 of the -log output and of its first five columns",
 	cases: $cases[0]
 }' >"$out/manifest.json"
 echo "updated $out"

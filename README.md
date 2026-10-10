@@ -256,7 +256,9 @@ All twelve [RFC 8251 test vectors](https://www.rfc-editor.org/rfc/rfc8251#sectio
 pass the official `opus_compare`, mono and stereo, in both builds. That check
 needs the C reference tools and runs outside this repository;
 `TestOfficialOpusVectors` checks the same files' hashes, every packet's final
-range, and exact sample counts:
+range, and exact sample counts, and `TestOfficialOpusVectorsFEC` decodes
+them with three of every seven packets lost and recovered through
+`DecodeFEC`, matching libopus record by record:
 
 ```sh
 OPUS_TEST_VECTORS=/path/to/opus_newvectors task test:official

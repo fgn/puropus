@@ -355,7 +355,12 @@ x86 SIMD kernels chosen at run time.
    configurations. Packages `silk` and `celt` also decode the SILK-only and
    CELT-only vectors on their own: `silk` compares its output with
    libopus's bit for bit, `celt` every frame's final range (and its PCM, with
-   the references `make celt-official-refs` builds). The RFC's waveform
+   the references `make celt-official-refs` builds).
+   `TestOfficialOpusVectorsFEC` loses three of every seven packets of each
+   vector and decodes every loss that a packet follows with `DecodeFEC`
+   (5,733 calls per output channel count, in all configurations, none with
+   LBRR data), to mono and to stereo; the record-by-record log must hash as
+   the generic build's. The RFC's waveform
    check, the official `opus_compare`, needs the C reference tools and runs
    outside the repository: all twelve vectors pass it, mono and stereo, in
    both builds.

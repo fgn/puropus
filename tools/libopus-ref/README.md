@@ -191,6 +191,13 @@ compiler that made them. The cases are:
   not use the next packet's FEC), before a longer frame, across bandwidth
   and mode switches, and at both ends.
 
+With `OPUS_TEST_VECTORS` set it also writes `official.txt`: the RFC 8251
+vectors with their range fields cleared and three of every seven records
+lost (indices `i % 7` in 2, 4 and 5), decoded with `-fec always` to one and
+two channels, as one line per vector and channel count with the SHA-256 of
+the log and of the log without its PCM hashes; `TestOfficialOpusVectorsFEC`
+reproduces both (the logs themselves are too large to commit).
+
 The script checks that the default build reproduces each fixture's
 committed golden without losses, and that both builds agree on every
 record's kind, sample count and final range; the manifest records how many

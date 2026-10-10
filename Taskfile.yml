@@ -101,12 +101,12 @@ tasks:
         cmd: CGO_ENABLED=0 GOAMD64=v1 GODEBUG={{.ITEM}} GOEXPERIMENT=simd go test -count=1 -timeout 120s ./opus -run 'TestSilkPCM'
       # The CELT kernels need AVX2 (scalar below it): the package's tests,
       # including the kernels against the scalar code and the tier check,
-      # and in package opus the bit-identical decode under preemption and
-      # the reference sequences, at each tier.
+      # and in package opus the bit-identical decode under preemption, the
+      # reference sequences and the decode logs, FEC included, at each tier.
       - for: ["", "cpu.avx512f=off", "cpu.avx512f=off,cpu.avx2=off", "cpu.avx512f=off,cpu.avx2=off,cpu.fma=off", "cpu.avx512f=off,cpu.avx2=off,cpu.fma=off,cpu.avx=off"]
         cmd: >
           CGO_ENABLED=0 GOAMD64=v1 GODEBUG={{.ITEM}} GOEXPERIMENT=simd go test -count=1 -timeout 120s
-          ./opus/internal/celt ./opus -run 'Test(TierMatchesCPU|.*AVX2.*|.*Libopus|DecodeSurvivesPreemption|TransitionVectors|StereoReferenceVectors|DecodeDoesNotAllocate)'
+          ./opus/internal/celt ./opus -run 'Test(TierMatchesCPU|.*AVX2.*|.*Libopus|DecodeSurvivesPreemption|TransitionVectors|StereoReferenceVectors|DecodeLogs|DecodeDoesNotAllocate)'
   refs:
     desc: build the libopus reference tools (C; set OPUS_SRC and OPUS_BUILD, see tools/libopus-ref/README.md)
     cmds:
