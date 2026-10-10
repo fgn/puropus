@@ -1,0 +1,1027 @@
+{
+  "schema": 1,
+  "libopus": "libopus 1.5.2",
+  "build": "generic: libopus 1.5.2 compiled from source by tools/libopus-ref/Makefile with GENERIC=1 (float, no intrinsics, no run-time CPU detection, -ffp-contract=off)",
+  "generic_library_sha256": "96d73d7c4c0992177d57d31739243d21a20e65cab0697e67681d263adf6cae57",
+  "decode_float_c_sha256": "7dca1c16f247f37e68798ab827630ed8074136a36be40ac9e45e9800408748fc",
+  "script_sha256": "f40079922b359964018163395d9c0317aca08c269afd046de6368560e85ffd91",
+  "compiler": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "command": "make -C tools/libopus-ref decode-logs (tools/libopus-ref/decode-logs.sh)",
+  "log": "<name>.txt: decode_float -log of the generic build, after one header line: index kind bytes samples final-range fnv1a64. kind is packet, lost (concealed: opus_decode_float(st, NULL, 0, pcm, n, 0)) or fec (opus_decode_float(st, next, len, pcm, n, 1) with the next record); n is the duration of a dropped packet, or the range field of an empty record. fnv1a64 hashes the record's interleaved float32 little-endian output.",
+  "pcm_sha256": "SHA-256 of decode_float's float32 little-endian output for the case: after the pre-skip and end trimming tools/packets prints for a fixture source, the whole decode otherwise",
+  "drop": "records lost as well as the empty ones, each concealed or recovered for its own packet's duration (decode_float -drop)",
+  "fec": "off: losses concealed; lbrr: a lost record whose next record is received and carries LBRR data (opus_packet_has_lbrr, first frame over one byte) decoded with decode_fec = 1; always: every lost record whose next record is received decoded with decode_fec = 1",
+  "default_build_pcm_differs": "records whose PCM hash differs when the default build ($OPUS_BUILD/libopus.a, SIMD kernels) decodes the case; their kinds, sample counts and final ranges are the same",
+  "cases": [
+    {
+      "name": "ogg-silk-nb",
+      "source": {
+        "fixture": "ogg-silk-nb.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "",
+      "fec": "off",
+      "records": 51,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "1c26d9ba07ef53fd24ef540873ca3839426438ec8ae2e3c7ff37208dc445c90f",
+      "pcm_sha256": "8a1f728619fe9ad4c194203f741871706b6db8d6744004f1edad9b2fdf0504ba",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-mb",
+      "source": {
+        "fixture": "ogg-silk-mb.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "",
+      "fec": "off",
+      "records": 76,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "1919e3111e9586edd854b42a46c027277558897e736a92c7bc5a4e812365cca7",
+      "pcm_sha256": "bbf2640f8da85f08b2a2972d083b1766e9c928ce59e938b72c83b0d8c084c807",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-wb",
+      "source": {
+        "fixture": "ogg-silk-wb.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "",
+      "fec": "off",
+      "records": 151,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "1ff2454cac9bc30e9235aef7bcac1186d3147cdcf35ff652aec309ff4bed54d5",
+      "pcm_sha256": "5437ed810c940123364d120d0f70a6817739848d4b6a7f6ae2a7591d573a1d9e",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-nb-10ms",
+      "source": {
+        "fixture": "ogg-silk-nb-10ms.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 168,
+      "drop": "",
+      "fec": "off",
+      "records": 151,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "6ab55df8f7e30c3815826be84214ad0bdca513000188723badf1573e21c541bd",
+      "pcm_sha256": "22949a9f5ca493ce0a9f5743ec6257844a3d22937c2abcf235f47f18022a3669",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-mb-10ms",
+      "source": {
+        "fixture": "ogg-silk-mb-10ms.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 168,
+      "drop": "",
+      "fec": "off",
+      "records": 151,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "3b99aa0600e67634e7c7ba3356b6b3872fadae53182a539ae0891a8809eba84c",
+      "pcm_sha256": "badc88dd06674741c153118925d234a5f460e7e42a00eb30ac4d892e4e582432",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-wb-10ms",
+      "source": {
+        "fixture": "ogg-silk-wb-10ms.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 168,
+      "drop": "",
+      "fec": "off",
+      "records": 151,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "abab81ab2833b8c0fb090d81d7e070000c282c0c228b08e5b7e74fbbf83d6ba1",
+      "pcm_sha256": "68e0fa35baca9b5555e94fa1a9efe75cce9a78a49baea386537844c452aed220",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-nb-40ms",
+      "source": {
+        "fixture": "ogg-silk-nb-40ms.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "",
+      "fec": "off",
+      "records": 38,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "087ff0604dbab507aaf7b251da7f2668a6946afc9ed45450d8ad36d6c59a93ef",
+      "pcm_sha256": "49ff114cefecbe5b85c5bfd064b36c2c73baf620edc9ed0a4de14d026818264a",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-mb-40ms",
+      "source": {
+        "fixture": "ogg-silk-mb-40ms.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "",
+      "fec": "off",
+      "records": 38,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "ced871eed7a320f6b71d3c0de0019217f21ab753488ce296f1d33f010983793f",
+      "pcm_sha256": "da52344e209469d33a542609ae3187877a70c1596dd35e5244572a250e62544b",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-wb-40ms",
+      "source": {
+        "fixture": "ogg-silk-wb-40ms.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "",
+      "fec": "off",
+      "records": 38,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "6bbe94cd4ffa7cedcd304d2146ecf3810a3661f5a0e47d6dd0558ab578c9cf16",
+      "pcm_sha256": "4ca54d7f64e14928e2fad7226bdd885616221a169a1677ab80feb84a829fc78a",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-nb-60ms",
+      "source": {
+        "fixture": "ogg-silk-nb-60ms.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 2568,
+      "drop": "",
+      "fec": "off",
+      "records": 26,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "ec9d680dc1022130a3f0e2171447743f7f30822455ad0f1d63298e5675aedafa",
+      "pcm_sha256": "39d74d2f0c9c8e45dbff9410bc50ab9cb34d9466df85346b6e908bb5a302fc7d",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-mb-60ms",
+      "source": {
+        "fixture": "ogg-silk-mb-60ms.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 2568,
+      "drop": "",
+      "fec": "off",
+      "records": 26,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "ca612d69ff0d5a07b6f80c7eca30720f1084128bc5d4b174c54a2f8b366202c8",
+      "pcm_sha256": "433425300b899d05ce5da6f98890edb4c55f72f8d4be701dd48dcd62a601f007",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-wb-60ms",
+      "source": {
+        "fixture": "ogg-silk-wb-60ms.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 2568,
+      "drop": "",
+      "fec": "off",
+      "records": 26,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "d6e57b3fa6861b3a5c4cb0fa4ceeb575a552b61d70adde3fe5cc0ed8115774ab",
+      "pcm_sha256": "874a6f524f7a1396f4488a2c37ae079776f944e5d0f7d48da8ddac63c3892039",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-nb-fec",
+      "source": {
+        "fixture": "ogg-silk-nb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "",
+      "fec": "off",
+      "records": 76,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "dc2a0a5bf7412b05d5fc3ffe93b812586cc7f3e0b595b81ee1caf1d1caf2da6a",
+      "pcm_sha256": "8c83455eba849087355d3b305f926843e1015ba85ee757f64a5e39f5f7d4693f",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-mb-fec",
+      "source": {
+        "fixture": "ogg-silk-mb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "",
+      "fec": "off",
+      "records": 76,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "0f855325f38889df35504e5e22ffdfee60445c652468fcea30c6b5375f57ee8b",
+      "pcm_sha256": "aed06ce93ba19b0260ba418e58a78183e16ee946a70ce731d96e874c05ecf112",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-wb-fec",
+      "source": {
+        "fixture": "ogg-silk-wb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "",
+      "fec": "off",
+      "records": 151,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "501a1180bbb3c431eb29727f721439756013e97d07380ee783dfb2b0a2392042",
+      "pcm_sha256": "e9d1d708e2a79b62a76ba82ec56fe72e9f394493f14408c40535197805d15589",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-wb-60ms-fec",
+      "source": {
+        "fixture": "ogg-silk-wb-60ms-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 2568,
+      "drop": "",
+      "fec": "off",
+      "records": 26,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "e0fcf7bc7c0b5daeff508ba802d33c6f04c33b4b3cd1480c7472ebff34588fd1",
+      "pcm_sha256": "ead3b3f0c91e583f8f00088a0a030d0bae83c8926669d2adc424b9752256682f",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-bandwidth-switch",
+      "source": {
+        "fixture": "ogg-silk-bandwidth-switch.opus"
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "",
+      "fec": "off",
+      "records": 700,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "e806154c361ba060532fdc60ffd494bba0cd36d9a1b778ecfd0ac1438ad15b33",
+      "pcm_sha256": "54c755505e666839bc4289e753ac678aef691bb9af47e5108a7fa9256e89640f",
+      "default_build_pcm_differs": 1
+    },
+    {
+      "name": "ogg-hybrid-swb",
+      "source": {
+        "fixture": "ogg-hybrid-swb.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "",
+      "fec": "off",
+      "records": 151,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "2b4e5dc0d29d31ec0b914455efa21696fcee81352992216f10b31f7901569578",
+      "pcm_sha256": "28ca67c78a582ed6d0a942ca3cc21d9e553cbea2f72908297d485afc83c4fae7",
+      "default_build_pcm_differs": 12
+    },
+    {
+      "name": "ogg-hybrid-swb-10ms",
+      "source": {
+        "fixture": "ogg-hybrid-swb-10ms.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 168,
+      "drop": "",
+      "fec": "off",
+      "records": 151,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "ce78db6cfcfdbe6723cbe2c5574b4d1cbb0886f13882c37f35057e8726373e3e",
+      "pcm_sha256": "c4027c1ed5921fc959c2b8325235cf2dfd8a9596716533704cd9bc0cb11242a2",
+      "default_build_pcm_differs": 7
+    },
+    {
+      "name": "ogg-hybrid-fb-10ms",
+      "source": {
+        "fixture": "ogg-hybrid-fb-10ms.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 168,
+      "drop": "",
+      "fec": "off",
+      "records": 151,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "34405136b0b27e65969e6ce33f71696e058afa883267294d4eef0f11eeddedc3",
+      "pcm_sha256": "c15421d8b947c2e9d7c6660cb2362741d11578a5572fa7651686aafd901245ce",
+      "default_build_pcm_differs": 146
+    },
+    {
+      "name": "ogg-hybrid-fb-fec",
+      "source": {
+        "fixture": "ogg-hybrid-fb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "",
+      "fec": "off",
+      "records": 151,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "0ee3aaed91c1c5aa85465ac17b975635a8e994f637591353632adb7d3f0dab45",
+      "pcm_sha256": "f2f3211335e46af2f5c0c389a3d1526755bc9ca90fbe5f64c4e905b642f7efb6",
+      "default_build_pcm_differs": 150
+    },
+    {
+      "name": "ogg-switch-silk-celt-wb",
+      "source": {
+        "fixture": "ogg-switch-silk-celt-wb.opus"
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "",
+      "fec": "off",
+      "records": 40,
+      "lost_records": 0,
+      "fec_records": 0,
+      "log_sha256": "e9ed59ee72c656c7fb2aba49c2f55b9986ea0fd37d2f39b54b38d33cf917aa16",
+      "pcm_sha256": "411fe86a5c403b62399cecd0890185ead8d72587f822cdbc5f1804b5a0863f48",
+      "default_build_pcm_differs": 17
+    },
+    {
+      "name": "ogg-silk-nb-fec.lbrr",
+      "source": {
+        "fixture": "ogg-silk-nb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "0,4,13,22,30-33,39,45,58-59,75",
+      "fec": "lbrr",
+      "records": 76,
+      "lost_records": 7,
+      "fec_records": 6,
+      "log_sha256": "3e869c4948044d7b028c5c7a7908695091886c48a115f59b1086453aee7b4671",
+      "pcm_sha256": "55caceb3a8c51152f625ca68326daa80d9b77ff244c3b7c109df338770375398",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-nb-fec.always",
+      "source": {
+        "fixture": "ogg-silk-nb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "0,4,13,22,30-33,39,45,58-59,75",
+      "fec": "always",
+      "records": 76,
+      "lost_records": 5,
+      "fec_records": 8,
+      "log_sha256": "61500b6ed5d3ec89f6ec65a02940d4a19e75b8f07d9c5a77bc538f4143bb1c7e",
+      "pcm_sha256": "55caceb3a8c51152f625ca68326daa80d9b77ff244c3b7c109df338770375398",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-mb-fec.lbrr",
+      "source": {
+        "fixture": "ogg-silk-mb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "0,4,13,22,30-33,39,45,58-59,75",
+      "fec": "lbrr",
+      "records": 76,
+      "lost_records": 7,
+      "fec_records": 6,
+      "log_sha256": "76a116dca2e0378f019090c583592137b0d5d392bc10e77dd384898ecbb040a5",
+      "pcm_sha256": "7d73a98c6bed55b465fd9e744cd8b9b840cf71d6c4d2f678957c3cabff785c55",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-mb-fec.always",
+      "source": {
+        "fixture": "ogg-silk-mb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "0,4,13,22,30-33,39,45,58-59,75",
+      "fec": "always",
+      "records": 76,
+      "lost_records": 5,
+      "fec_records": 8,
+      "log_sha256": "0024d6c464fbfe54003fee271ba15f9df5413ef83beefbdd9de7177080dc0f21",
+      "pcm_sha256": "7d73a98c6bed55b465fd9e744cd8b9b840cf71d6c4d2f678957c3cabff785c55",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-wb-fec.lbrr",
+      "source": {
+        "fixture": "ogg-silk-wb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "0,4,13,22,30-33,39,45,58-59,72,99-102,120,150",
+      "fec": "lbrr",
+      "records": 151,
+      "lost_records": 11,
+      "fec_records": 8,
+      "log_sha256": "e463d800bedb8c4a0f1534fd5e7f03b582aba1a46ee66087f26bcfe5104a56a3",
+      "pcm_sha256": "c75d807ecded5c35c1de49b2b8d992bd5f1bb7de39eaa6e1752890ec921cba03",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-wb-fec.always",
+      "source": {
+        "fixture": "ogg-silk-wb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "0,4,13,22,30-33,39,45,58-59,72,99-102,120,150",
+      "fec": "always",
+      "records": 151,
+      "lost_records": 8,
+      "fec_records": 11,
+      "log_sha256": "01a458e7df90e6c6ead2fde4baeaf5b9ec487a521e82ab0e90d6a8845fabb520",
+      "pcm_sha256": "c75d807ecded5c35c1de49b2b8d992bd5f1bb7de39eaa6e1752890ec921cba03",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-wb-fec.c2.lbrr",
+      "source": {
+        "fixture": "ogg-silk-wb-fec.opus"
+      },
+      "channels": 2,
+      "skip": 312,
+      "trim": 648,
+      "drop": "0,4,13,22,30-33,39,45,58-59,72,99-102,120,150",
+      "fec": "lbrr",
+      "records": 151,
+      "lost_records": 11,
+      "fec_records": 8,
+      "log_sha256": "c6d8bb5e293c2362b7abe16f0dd050ce4fd2e0784d42cb01467680e0f4763aba",
+      "pcm_sha256": "49e08f8cc62e9a2e045e8d94f0c7e0f98e334795151cf60cc999d4d783b5bfe3",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-wb-60ms-fec.lbrr",
+      "source": {
+        "fixture": "ogg-silk-wb-60ms-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 2568,
+      "drop": "0,4,9-11,17,25",
+      "fec": "lbrr",
+      "records": 26,
+      "lost_records": 3,
+      "fec_records": 4,
+      "log_sha256": "002201ae8e6e298324ba49ec8c0217db0d85dfc8ffce7d8b4853093f94609658",
+      "pcm_sha256": "690ba2464d6caee37a2eada31c8af390bd323af2add107c87f3679ed2ed8a90a",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-silk-wb-60ms-fec.always",
+      "source": {
+        "fixture": "ogg-silk-wb-60ms-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 2568,
+      "drop": "0,4,9-11,17,25",
+      "fec": "always",
+      "records": 26,
+      "lost_records": 3,
+      "fec_records": 4,
+      "log_sha256": "b56719a7d030acae49d9a2d5d41b9ca56ff45f63a9e273f5ba959c50d099b569",
+      "pcm_sha256": "690ba2464d6caee37a2eada31c8af390bd323af2add107c87f3679ed2ed8a90a",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "ogg-hybrid-fb-fec.lbrr",
+      "source": {
+        "fixture": "ogg-hybrid-fb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "0,4,13,22,30-33,39,45,58-59,72,99-102,120,150",
+      "fec": "lbrr",
+      "records": 151,
+      "lost_records": 11,
+      "fec_records": 8,
+      "log_sha256": "119509b4903349f23052e5ebcb5fb6f1b0af7da5e5d567bf8d2657e9277b8b72",
+      "pcm_sha256": "4e3eabf96dfbe25668e4e8cba6da79db012f796728011e7807063f27cec682eb",
+      "default_build_pcm_differs": 150
+    },
+    {
+      "name": "ogg-hybrid-fb-fec.always",
+      "source": {
+        "fixture": "ogg-hybrid-fb-fec.opus"
+      },
+      "channels": 1,
+      "skip": 312,
+      "trim": 648,
+      "drop": "0,4,13,22,30-33,39,45,58-59,72,99-102,120,150",
+      "fec": "always",
+      "records": 151,
+      "lost_records": 8,
+      "fec_records": 11,
+      "log_sha256": "188204fbc0b076a0f594455f337e2112b7b6394983a2cf2fea49da2dabb3a329",
+      "pcm_sha256": "4e3eabf96dfbe25668e4e8cba6da79db012f796728011e7807063f27cec682eb",
+      "default_build_pcm_differs": 150
+    },
+    {
+      "name": "ogg-hybrid-fb-fec.c2.lbrr",
+      "source": {
+        "fixture": "ogg-hybrid-fb-fec.opus"
+      },
+      "channels": 2,
+      "skip": 312,
+      "trim": 648,
+      "drop": "0,4,13,22,30-33,39,45,58-59,72,99-102,120,150",
+      "fec": "lbrr",
+      "records": 151,
+      "lost_records": 11,
+      "fec_records": 8,
+      "log_sha256": "f88b81de8f170e9c5bb2607c7442111636fe38769c699a4ed13aead9c455c5a8",
+      "pcm_sha256": "ee85fda79324ffce1b2a003cf0c4afd03a8fc1bd5068a5ecca1e10d4afce1ecc",
+      "default_build_pcm_differs": 150
+    },
+    {
+      "name": "channels-silk-fec.c2.lbrr",
+      "source": {
+        "vector": "stereo-vectors/channels-silk-fec"
+      },
+      "channels": 2,
+      "skip": 0,
+      "trim": 0,
+      "drop": "0,5,12,14,19-21,23,28,36,47,55,60,71",
+      "fec": "lbrr",
+      "records": 72,
+      "lost_records": 9,
+      "fec_records": 5,
+      "log_sha256": "94155dbbf86e87a78a2de7a41cbf3574e87eba845d511e4d973f074e5f787475",
+      "pcm_sha256": "79ee75bbf031645e1697d83b7552f4533cbd1dceefc2b6f8d7f25d8c57ed099a",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "channels-silk-fec.c1.lbrr",
+      "source": {
+        "vector": "stereo-vectors/channels-silk-fec"
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "0,5,12,14,19-21,23,28,36,47,55,60,71",
+      "fec": "lbrr",
+      "records": 72,
+      "lost_records": 9,
+      "fec_records": 5,
+      "log_sha256": "ca98ae192194e09b3a13c7dcb0e9a767100c9e1079adcbdf8fddf46826a37e64",
+      "pcm_sha256": "8cd0b54ab27c236b55beb7b711086ea9c52522dff9f24c9726f7013b5e4043ee",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "channels-silk-fec.c2.always",
+      "source": {
+        "vector": "stereo-vectors/channels-silk-fec"
+      },
+      "channels": 2,
+      "skip": 0,
+      "trim": 0,
+      "drop": "0,5,12,14,19-21,23,28,36,47,55,60,71",
+      "fec": "always",
+      "records": 72,
+      "lost_records": 3,
+      "fec_records": 11,
+      "log_sha256": "020ed479f504801fcf9ee9ac4a0ad7af3e7f818db60e956b00da04db687c3783",
+      "pcm_sha256": "2c2ea87660989f85ed7c55afd588ba48c807c494a58c38a9c555260c4e5268e6",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "channels-hybrid-fec.c2.lbrr",
+      "source": {
+        "vector": "stereo-vectors/channels-hybrid-fec"
+      },
+      "channels": 2,
+      "skip": 0,
+      "trim": 0,
+      "drop": "0,5,12,14,19-21,23,28,36,47,55,60,71",
+      "fec": "lbrr",
+      "records": 72,
+      "lost_records": 8,
+      "fec_records": 6,
+      "log_sha256": "5e79b9e422612bc31532879821ada46389aa59aa068f4ed57a74c7a408124148",
+      "pcm_sha256": "40a75b2bf4cb6405ee1c3a7210190854d0909ae9e2c99c38d61a4256c0cb5efe",
+      "default_build_pcm_differs": 71
+    },
+    {
+      "name": "channels-hybrid-fec.c1.lbrr",
+      "source": {
+        "vector": "stereo-vectors/channels-hybrid-fec"
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "0,5,12,14,19-21,23,28,36,47,55,60,71",
+      "fec": "lbrr",
+      "records": 72,
+      "lost_records": 8,
+      "fec_records": 6,
+      "log_sha256": "ce2112af06dc573999e6cd3d34dbc5ca381a555d9d03a6ae69284b6a1c09661e",
+      "pcm_sha256": "4f4e893afa82a2b5bc2710d09b1d8d4f7427b5eb59b298f79c943f0eceb873fd",
+      "default_build_pcm_differs": 71
+    },
+    {
+      "name": "channels-hybrid-fec.c2.always",
+      "source": {
+        "vector": "stereo-vectors/channels-hybrid-fec"
+      },
+      "channels": 2,
+      "skip": 0,
+      "trim": 0,
+      "drop": "0,5,12,14,19-21,23,28,36,47,55,60,71",
+      "fec": "always",
+      "records": 72,
+      "lost_records": 3,
+      "fec_records": 11,
+      "log_sha256": "902af551aacdeb083d37e18d406cce813d1d23c1d505e9a824f25b8d2a792c39",
+      "pcm_sha256": "728baad92fd22b4c57ed6ba8b353b3a439858d5239490d08743309df64154cd2",
+      "default_build_pcm_differs": 71
+    },
+    {
+      "name": "transitions-cbr16.always",
+      "source": {
+        "vector": "transition-vectors/transitions-cbr16"
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "5,11,23,25,35,48,59,62,71,80-81,83",
+      "fec": "always",
+      "records": 84,
+      "lost_records": 2,
+      "fec_records": 10,
+      "log_sha256": "ebb0677ab761f3d976b652c20ce4761f8bd82c8cbae95b12ac3dc157fc521c23",
+      "pcm_sha256": "8f3abdca0786ad758bb32ec3efad4e8de96f90160793aa9ea926444b306cd1ae",
+      "default_build_pcm_differs": 51
+    },
+    {
+      "name": "modes.c2.always",
+      "source": {
+        "vector": "stereo-vectors/modes"
+      },
+      "channels": 2,
+      "skip": 0,
+      "trim": 0,
+      "drop": "5,11,23,25,35,48,59,62,71",
+      "fec": "always",
+      "records": 72,
+      "lost_records": 1,
+      "fec_records": 8,
+      "log_sha256": "7da6b584a54a9959a5f84100a752e25782f001baed357188c5dc0615febcbb2e",
+      "pcm_sha256": "7ae7c22cf99c7a270e271113f254d2b36c4a82e49e010f1214c1618241181c07",
+      "default_build_pcm_differs": 51
+    },
+    {
+      "name": "modes.c1.always",
+      "source": {
+        "vector": "stereo-vectors/modes"
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "5,11,23,25,35,48,59,62,71",
+      "fec": "always",
+      "records": 72,
+      "lost_records": 1,
+      "fec_records": 8,
+      "log_sha256": "34ec0506985f2a25f4197f613d8dec208603c33d921ef082798141a4b48c5e63",
+      "pcm_sha256": "6820e262bf1bde8a047a6b40b855fb15890059b6adb0e2fda33dc48e5d70f7ab",
+      "default_build_pcm_differs": 51
+    },
+    {
+      "name": "loss-silk.always",
+      "source": {
+        "vector": "transition-vectors/loss-silk"
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "32,42,48",
+      "fec": "always",
+      "records": 59,
+      "lost_records": 3,
+      "fec_records": 5,
+      "log_sha256": "928db3b7d543a745bd96324606f46d97010f5711b829205cfff9de2243f3fa33",
+      "pcm_sha256": "e984fef4e015754a0ace5bdd1a6fcc74788e7c908ecc2da640523c3b7db3b1c2",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "loss-silk-nb10.always",
+      "source": {
+        "vector": "transition-vectors/loss-silk-nb10"
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "",
+      "fec": "always",
+      "records": 36,
+      "lost_records": 3,
+      "fec_records": 3,
+      "log_sha256": "6d188aa407eff96d822801de27aff0b0da8574911820ef29a5306a2efa04eca8",
+      "pcm_sha256": "2b06f785d1bbbd575d34fa381038d5c9c80b63e34c28cfe1f47903543be76afe",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "loss-silk-mb60.always",
+      "source": {
+        "vector": "transition-vectors/loss-silk-mb60"
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "",
+      "fec": "always",
+      "records": 36,
+      "lost_records": 3,
+      "fec_records": 3,
+      "log_sha256": "c18173c5b952c1d8e43699203adbbdae4e3cccca72c69143339768a80177a1a1",
+      "pcm_sha256": "b7696b0c0f1b6d697c3817bb80203ed3f121815b49a0e1d9f34f0f1a5ee8e180",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "loss-hybrid.always",
+      "source": {
+        "vector": "transition-vectors/loss-hybrid"
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "32,42,48",
+      "fec": "always",
+      "records": 59,
+      "lost_records": 3,
+      "fec_records": 5,
+      "log_sha256": "8bace5e4b8a725aba239f21b7643e168740e793e2c61511f3cd634869ed6319d",
+      "pcm_sha256": "0e1e8315515af154b0c494c2956ec758f72d7b93997d4bd3654380260eb5269c",
+      "default_build_pcm_differs": 59
+    },
+    {
+      "name": "loss-celt.always",
+      "source": {
+        "vector": "transition-vectors/loss-celt"
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "",
+      "fec": "always",
+      "records": 59,
+      "lost_records": 3,
+      "fec_records": 2,
+      "log_sha256": "24d975670de95487a07804074cad0a3f1e03ac778147000f459519d8ccba5a59",
+      "pcm_sha256": "3be1100bd68412b172877070daaad66c54c5e815eb243ef948dcb0f9eec2cb60",
+      "default_build_pcm_differs": 59
+    },
+    {
+      "name": "quiet-dtx.c2.always",
+      "source": {
+        "vector": "stereo-vectors/quiet-dtx"
+      },
+      "channels": 2,
+      "skip": 0,
+      "trim": 0,
+      "drop": "",
+      "fec": "always",
+      "records": 120,
+      "lost_records": 3,
+      "fec_records": 2,
+      "log_sha256": "bbeff5ba33872ecb6f9df329df15d46f7b8ca6f147aa7fd0bf6ebfeaaa9e75a4",
+      "pcm_sha256": "acad3c3efed4c6cbe11eb4e4c252268a9e1abe1c5fe274c8a06d3954048dda57",
+      "default_build_pcm_differs": 0
+    },
+    {
+      "name": "mode-switch.lbrr",
+      "source": {
+        "splice": "mode_switch",
+        "segments": [
+          {
+            "fixture": "ogg-silk-wb-fec.opus",
+            "first": 0,
+            "count": 30
+          },
+          {
+            "fixture": "ogg-hybrid-fb-fec.opus",
+            "first": 30,
+            "count": 30
+          },
+          {
+            "fixture": "ogg-celt-fb.opus",
+            "first": 60,
+            "count": 15
+          },
+          {
+            "fixture": "ogg-silk-wb-fec.opus",
+            "first": 75,
+            "count": 25
+          },
+          {
+            "fixture": "ogg-silk-wb-60ms-fec.opus",
+            "first": 5,
+            "count": 10
+          },
+          {
+            "fixture": "ogg-silk-nb-fec.opus",
+            "first": 20,
+            "count": 20
+          },
+          {
+            "fixture": "ogg-hybrid-fb-fec.opus",
+            "first": 100,
+            "count": 20
+          },
+          {
+            "fixture": "ogg-silk-mb-fec.opus",
+            "first": 50,
+            "count": 10
+          }
+        ]
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "0,10,29,40,59,65,74,76,99,102,109,115-117,129,140,149,159",
+      "fec": "lbrr",
+      "records": 160,
+      "lost_records": 5,
+      "fec_records": 13,
+      "log_sha256": "c121fac96c2843dbd4a222b860d90e0baf8c3e76d4be63d290082d98a3a28a4f",
+      "pcm_sha256": "939435c55f1d32974ce099e251c156de691751aa28ccf75b3c5935d80556cf4a",
+      "default_build_pcm_differs": 66
+    },
+    {
+      "name": "mode-switch.always",
+      "source": {
+        "splice": "mode_switch",
+        "segments": [
+          {
+            "fixture": "ogg-silk-wb-fec.opus",
+            "first": 0,
+            "count": 30
+          },
+          {
+            "fixture": "ogg-hybrid-fb-fec.opus",
+            "first": 30,
+            "count": 30
+          },
+          {
+            "fixture": "ogg-celt-fb.opus",
+            "first": 60,
+            "count": 15
+          },
+          {
+            "fixture": "ogg-silk-wb-fec.opus",
+            "first": 75,
+            "count": 25
+          },
+          {
+            "fixture": "ogg-silk-wb-60ms-fec.opus",
+            "first": 5,
+            "count": 10
+          },
+          {
+            "fixture": "ogg-silk-nb-fec.opus",
+            "first": 20,
+            "count": 20
+          },
+          {
+            "fixture": "ogg-hybrid-fb-fec.opus",
+            "first": 100,
+            "count": 20
+          },
+          {
+            "fixture": "ogg-silk-mb-fec.opus",
+            "first": 50,
+            "count": 10
+          }
+        ]
+      },
+      "channels": 1,
+      "skip": 0,
+      "trim": 0,
+      "drop": "0,10,29,40,59,65,74,76,99,102,109,115-117,129,140,149,159",
+      "fec": "always",
+      "records": 160,
+      "lost_records": 3,
+      "fec_records": 15,
+      "log_sha256": "45c145ceda1b7fa3811fedcf2b8c26f34ad413c00f2c5be6734084ae04b84ede",
+      "pcm_sha256": "939435c55f1d32974ce099e251c156de691751aa28ccf75b3c5935d80556cf4a",
+      "default_build_pcm_differs": 66
+    },
+    {
+      "name": "mode-switch.c2.lbrr",
+      "source": {
+        "splice": "mode_switch",
+        "segments": [
+          {
+            "fixture": "ogg-silk-wb-fec.opus",
+            "first": 0,
+            "count": 30
+          },
+          {
+            "fixture": "ogg-hybrid-fb-fec.opus",
+            "first": 30,
+            "count": 30
+          },
+          {
+            "fixture": "ogg-celt-fb.opus",
+            "first": 60,
+            "count": 15
+          },
+          {
+            "fixture": "ogg-silk-wb-fec.opus",
+            "first": 75,
+            "count": 25
+          },
+          {
+            "fixture": "ogg-silk-wb-60ms-fec.opus",
+            "first": 5,
+            "count": 10
+          },
+          {
+            "fixture": "ogg-silk-nb-fec.opus",
+            "first": 20,
+            "count": 20
+          },
+          {
+            "fixture": "ogg-hybrid-fb-fec.opus",
+            "first": 100,
+            "count": 20
+          },
+          {
+            "fixture": "ogg-silk-mb-fec.opus",
+            "first": 50,
+            "count": 10
+          }
+        ]
+      },
+      "channels": 2,
+      "skip": 0,
+      "trim": 0,
+      "drop": "0,10,29,40,59,65,74,76,99,102,109,115-117,129,140,149,159",
+      "fec": "lbrr",
+      "records": 160,
+      "lost_records": 5,
+      "fec_records": 13,
+      "log_sha256": "0a9f47521aac79ca23b8be16569b68c44fde0da8c77fefb758736f370da8b670",
+      "pcm_sha256": "d308bc122e0ac46558958af959e060167cdc8985440628d6ce953e20e654b3a2",
+      "default_build_pcm_differs": 67
+    }
+  ]
+}

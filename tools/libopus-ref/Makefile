@@ -8,6 +8,9 @@
 #   make goldens          regenerate the CELT fixture goldens in testdata/
 #   make generic-vectors  the generic build's decode of the sequences in
 #                         opus/testdata/{transition,stereo}-vectors
+#   make decode-logs      the generic build's record-by-record decode of the
+#                         SILK and hybrid fixtures and of FEC loss cases, in
+#                         opus/testdata/decode-logs
 #
 # Every target but clean needs OPUS_SRC, the libopus 1.5.2 source tree (git
 # tag v1.5.2), and every target without GENERIC=1 also needs OPUS_BUILD, a
@@ -46,7 +49,7 @@ OUT     := $(BUILD)
 LIBOPUS := $(OPUS_BUILD)/libopus.a
 endif
 
-.PHONY: all entcode-vectors packet-vectors goldens generic-vectors celt-vectors celt-official-refs clean
+.PHONY: all entcode-vectors packet-vectors goldens generic-vectors decode-logs celt-vectors celt-official-refs clean
 all: $(OUT)/decode_float $(OUT)/entcode_ref $(OUT)/packet_ref $(OUT)/celt_decode
 
 $(OUT)/decode_float: decode_float.c $(LIBOPUS)
@@ -76,6 +79,9 @@ goldens: $(OUT)/decode_float
 
 generic-vectors: $(BUILD)/decode_float $(BUILD)/generic/decode_float
 	./generic-vectors.sh
+
+decode-logs: $(BUILD)/decode_float $(BUILD)/generic/decode_float
+	./decode-logs.sh
 
 # The generic build: libopus's own source lists (as its Makefile.unix uses
 # them), float, no intrinsics and no run-time CPU detection, and no fused

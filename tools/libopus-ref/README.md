@@ -55,7 +55,7 @@ environment or on the command line); `make` stops with a message when one is
 missing. `GENERIC=1` needs only `OPUS_SRC`. Targets that compare the two
 builds (`generic-vectors`, `celt-vectors`) build the generic library
 themselves. Build output goes to `build/`, which git ignores. Besides a C
-compiler and make, the scripts below need go, jq, xxd, gzip, cmp and
+compiler and make, the scripts below need go, jq, xxd, awk, gzip, cmp and
 sha256sum, and `gen-goldens.sh` an `ffmpeg` binary.
 
 ## decode_float
@@ -161,6 +161,42 @@ gate the Go decoder against both builds: strictly against the generic one,
 which it follows; against the default one with a wider limit only where the
 two libopus builds differ, in CELT pitch concealment and its recovery
 (`opus/transition_vectors_test.go` has the measured distances).
+
+## Record-by-record decode logs (decode-logs.sh)
+
+`decode-logs.sh` (`make decode-logs`) writes `opus/testdata/decode-logs`:
+the generic build's `decode_float -log` of a list of cases, one line per
+record with the decode kind, the sample count, the final range and an FNV-1a
+hash of the PCM, and `manifest.json`, which records each case's source,
+output channels, pre-skip and trimming, lost records and FEC policy, the
+SHA-256 of its log and of its decoded PCM, and the tool, library and
+compiler that made them. The cases are:
+
+- every SILK and hybrid fixture and the SILK/CELT switch fixture, without
+  losses: per-packet final ranges, those of packets with CELT redundancy
+  included, and bit-exact PCM of the generic build for the hybrid fixtures;
+- the FEC fixtures (`ogg-silk-{nb,mb,wb}-fec`, `ogg-silk-wb-60ms-fec`,
+  `ogg-hybrid-fb-fec`) and the stereo sequences `channels-silk-fec` and
+  `channels-hybrid-fec` (coded mono and stereo, decoded to one and two
+  channels), with single losses, bursts, the first and the last packet lost,
+  and losses before packets without LBRR data, recovered with `-fec lbrr`
+  and `-fec always`;
+- the mode switch sequences `transitions-cbr16` and `modes` with losses, and
+  the loss sequences with their empty records plus losses before TOC-only
+  and empty-frame packets, with `-fec always` (none of their packets carries
+  LBRR data, so FEC decoding conceals at the next packet's configuration);
+- a splice of fixture packet ranges (`mode_switch` in the script) that
+  switches between SILK WB, hybrid FB, CELT FB, SILK WB 60 ms, SILK NB and
+  SILK MB, with losses before a CELT packet, after one (where libopus does
+  not use the next packet's FEC), before a longer frame, across bandwidth
+  and mode switches, and at both ends.
+
+The script checks that the default build reproduces each fixture's
+committed golden without losses, and that both builds agree on every
+record's kind, sample count and final range; the manifest records how many
+records' PCM differs between them. `opus/decode_logs_test.go` replays the
+cases with `Decode`, `Conceal` and `DecodeFEC` and requires every record bit
+for bit.
 
 ## packet_ref
 

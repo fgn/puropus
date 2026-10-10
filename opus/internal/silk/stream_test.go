@@ -26,7 +26,8 @@ const repoTestdata = "../../../testdata"
 // libopus's encoder smooths SILK bandwidth switches with CELT redundancy
 // frames, which the CELT decoder handles: for those packets the final range
 // (which XORs in the CELT range) and the 2.5 or 5 ms that libopus mixes with
-// the CELT audio are left out, and the test logs how many.
+// the CELT audio are left out, and the test logs how many. Package opus's
+// TestDecodeLogs checks them, decoding the redundancy with the CELT decoder.
 func TestOggFixtures(t *testing.T) {
 	fixtures, err := filepath.Glob(filepath.Join(repoTestdata, "ogg-silk-*.opus"))
 	if err != nil || len(fixtures) == 0 {
