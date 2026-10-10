@@ -654,3 +654,50 @@ func TestKeptNativeIsNotNilWhenNothingDecodes(t *testing.T) {
 		t.Fatalf("without KeepNative: %d packets, native %v (nil %v)", len(src.Packets), src.Native, src.Native == nil)
 	}
 }
+
+// Packets inside the pre-skip contribute nothing but the decoder warm-up of
+// the packet after them, so ReleasePackets keeps them while it keeps that
+// packet, as Cut does, even when they end before the release time. A cut
+// after the release then decodes exactly like the source.
+func TestReleasePacketsKeepsPreSkipPacketsWithTheirSuccessor(t *testing.T) {
+	base := sourceFor(t, "ogg-celt-fb-10ms.opus") // 480-sample packets, pre-skip 120
+	packets := append([]Packet(nil), base.Packets...)
+	packets[0] = Packet{Data: packets[0].Data, Skip: 480}
+	packets[1] = Packet{Data: packets[1].Data, Duration: 360, Skip: 120}
+	for i := 2; i < len(packets); i++ {
+		packets[i].Start = packets[i-1].End()
+	}
+	var buf bytes.Buffer
+	if err := (&Stream{Header: base.Header, Packets: packets}).WriteOgg(&buf); err != nil {
+		t.Fatal(err)
+	}
+	direct, _ := decodeAll(t, bytes.NewReader(buf.Bytes()), DecodeOptions{})
+
+	dec, err := NewDecoder(bytes.NewReader(buf.Bytes()), DecodeOptions{KeepNative: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dec.Read(make([]float32, 240)); err != nil { // 5 ms, inside packet 1
+		t.Fatal(err)
+	}
+	dec.ReleasePackets(dec.Position())
+	src := dec.Source()
+	if len(src.Packets) < 2 || src.Packets[0].Duration != 0 || src.Packets[1].Skip != 120 {
+		t.Fatalf("retained packets start with %+v", src.Packets[:min(2, len(src.Packets))])
+	}
+	if int64(len(src.Native)) != src.Packets[len(src.Packets)-1].End() {
+		t.Fatalf("native has %d samples for packets ending at %d", len(src.Native), src.Packets[len(src.Packets)-1].End())
+	}
+	if _, err := readAll(dec, make([]float32, 4096)); !errors.Is(err, io.EOF) {
+		t.Fatal(err)
+	}
+	src = dec.Source()
+	out, err := Cut(src, Edit{Keep: []Interval{{0, src.Duration()}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pcm := decodeStream(t, out, FormatOgg)
+	if len(pcm) != len(direct) || maxAbsDiff(pcm, direct) != 0 {
+		t.Fatalf("cut after the release decodes %d samples, differs by %g", len(pcm), maxAbsDiff(pcm, direct))
+	}
+}

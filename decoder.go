@@ -214,13 +214,18 @@ func (d *Decoder) keepNative(pcm []float32) {
 
 // ReleasePackets drops retained packets that end at or before t, and the
 // native PCM before the first packet that remains, so a long-running stream
-// can hand each finished window to Cut and then bound its memory. Later
-// Source calls return only what remains; packet positions are unchanged.
+// can hand each finished window to Cut and then bound its memory. Packets
+// inside the pre-skip stay as long as the packet after them does, because
+// they carry its decoder warm-up, which Cut keeps with it. Later Source calls
+// return only what remains; packet positions are unchanged.
 func (d *Decoder) ReleasePackets(t time.Duration) {
 	limit := durationToSamples(t)
 	keep := 0
 	for keep < len(d.packets) && d.packets[keep].End() <= limit {
 		keep++
+	}
+	for keep > 0 && keep < len(d.packets) && d.packets[keep-1].Duration == 0 {
+		keep--
 	}
 	if keep == 0 {
 		return
