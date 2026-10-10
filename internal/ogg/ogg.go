@@ -43,16 +43,18 @@ type Packet struct {
 
 // Reader reassembles packets from one logical stream at a time in an Ogg
 // bitstream. Pages of grouped streams are skipped, while chained streams are
-// returned in sequence.
+// returned in sequence. A link ends with the selected stream's EOS page or,
+// when that page was lost, at the next BOS page.
 //
 // A page with a bad checksum or version is dropped and the bytes after its
 // capture pattern are scanned again for the next page. A packet spanning
 // pages is dropped only when a page of the selected stream is missing, never
 // for a page of another stream. RFC 3533 leaves recovery to the reader. Like
-// FFmpeg's Ogg demuxer, this one drops corrupt pages and rescans them.
-// Unlike it, it also rescans a page whose corrupt size runs past the end of
-// the input, so the pages that size swallowed are still read, and it never
-// joins the fragments of a packet across a missing page (RFC 7845 §3).
+// FFmpeg's Ogg demuxer, this one drops corrupt pages, rescans them, and
+// starts a new link at a BOS page. Unlike it, it also rescans a page whose
+// corrupt size runs past the end of the input, so the pages that size
+// swallowed are still read, and it never joins the fragments of a packet
+// across a missing page (RFC 7845 §3).
 type Reader struct {
 	br *bufio.Reader
 	// pending holds bytes already read from br that are scanned before br:
@@ -61,7 +63,8 @@ type Reader struct {
 
 	serial    uint32 // the selected stream, valid when haveSer is set
 	haveSer   bool
-	afterLink bool   // the selected stream ended with an EOS page
+	inData    bool   // the selected stream has had a page without the BOS flag
+	afterLink bool   // the selected stream's link has ended
 	partial   []byte // a packet that continues on the next page; empty unless haveSeq
 	queue     []Packet
 	queued    int // packets of queue that Next has returned
@@ -236,8 +239,15 @@ func (r *Reader) readPage() error {
 		r.dropAndRescan(pageBytes(header, lacing, payload))
 		return nil
 	}
+	if r.haveSer && r.inData && flags&FlagBOS != 0 {
+		// RFC 3533 places all BOS pages of a link before its other pages, so
+		// a BOS page after the selected stream's data starts the next
+		// chained link: the stream's EOS page was lost. End the link here
+		// and select from the new one, whatever this page's serial.
+		r.endLink()
+	}
 	if !r.haveSer {
-		// After an EOS page only a BOS page can start the next chained stream.
+		// After a link only a BOS page can start the next chained stream.
 		if r.afterLink && flags&FlagBOS == 0 {
 			return nil
 		}
@@ -253,6 +263,9 @@ func (r *Reader) readPage() error {
 		r.selectStream(serial)
 	} else if serial != r.serial {
 		return nil
+	}
+	if flags&FlagBOS == 0 {
+		r.inData = true
 	}
 
 	// A page of the selected stream is missing (dropped as corrupt, or never
@@ -318,10 +331,7 @@ func (r *Reader) readPage() error {
 		}
 	}
 	if flags&FlagEOS != 0 {
-		r.haveSer = false
-		r.afterLink = true
-		r.haveSeq = false
-		r.partial = r.partial[:0]
+		r.endLink()
 	}
 	return nil
 }
@@ -329,9 +339,20 @@ func (r *Reader) readPage() error {
 func (r *Reader) selectStream(serial uint32) {
 	r.serial = serial
 	r.haveSer = true
+	r.inData = false
 	r.afterLink = false
 	r.partial = r.partial[:0]
 	r.haveSeq = false
+}
+
+// endLink ends the selected stream's link: until a BOS page starts the next
+// link, no stream is selected.
+func (r *Reader) endLink() {
+	r.haveSer = false
+	r.inData = false
+	r.afterLink = true
+	r.haveSeq = false
+	r.partial = r.partial[:0]
 }
 
 // firstPacket returns the first packet completed on a page that does not

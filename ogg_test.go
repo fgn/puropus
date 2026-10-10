@@ -437,3 +437,133 @@ func assertSamePCM(t *testing.T, name string, data []byte, want []float32) {
 		}
 	}
 }
+
+// When the EOS page of a chained link is lost (corrupt, missing, or cut
+// short where another file was appended), the next link still starts at its
+// BOS page, since RFC 3533 places every BOS page of a link before its other
+// pages. The file then decodes exactly as if the first link had ended on the
+// page before the lost one: the second link's header applies, the codec is
+// reset, and the timeline runs on. Only the lost page's packets are missing,
+// and with them the first link's end trimming, which no longer has anything
+// to trim. ffmpeg decodes the same samples from the fixtures chained this
+// way (143 688 and 144 000), and fails on a grouped second link even when
+// nothing is lost.
+func TestDecodeChainedOggWithLostEOSPage(t *testing.T) {
+	a := readFixture(t, "ogg-celt-fb.opus")
+	pagesA := oggPages(t, a)
+	eos := pagesA[len(pagesA)-1]
+	// The first link as it would be had it ended on the page before.
+	ended := bytes.Clone(a[:eos.start])
+	before := pagesA[len(pagesA)-2]
+	ended[before.start+5] |= 0x04
+	fixOggCRC(ended, before)
+
+	// A second link with its own pre-skip and output gain.
+	b := bytes.Clone(readFixture(t, "ogg-silk-wb.opus"))
+	binary.LittleEndian.PutUint16(b[27+1+10:], 1000) // OpusHead pre-skip
+	binary.LittleEndian.PutUint16(b[27+1+16:], 768)  // output gain, +3 dB
+	fixOggCRC(b, oggPages(t, b)[0])
+	wantA, _ := decodeAll(t, bytes.NewReader(ended), DecodeOptions{})
+	wantB, _ := decodeAll(t, bytes.NewReader(b), DecodeOptions{})
+
+	for _, next := range []struct {
+		name string
+		data []byte
+	}{
+		{"new serial", b},
+		{"same serial", a},
+		{"grouped", readFixture(t, "ogg-grouped-vorbis-opus.ogg")},
+	} {
+		reference := append(bytes.Clone(ended), next.data...)
+		want48, _ := decodeAll(t, bytes.NewReader(reference), DecodeOptions{})
+		want16, _ := decodeAll(t, bytes.NewReader(reference), DecodeOptions{SampleRate: 16000})
+		wantSrc, err := ReadPackets(bytes.NewReader(reference))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, refDec := decodeAll(t, bytes.NewReader(reference), DecodeOptions{KeepNative: true})
+		wantNative := refDec.Source().Native
+		for _, lost := range []struct {
+			name string
+			page []byte
+		}{
+			{"corrupt", append(bytes.Clone(a[eos.start:eos.start+eos.size-1]), a[eos.start+eos.size-1]^0x01)},
+			{"missing", nil},
+			{"cut short", a[eos.start : eos.start+40]},
+		} {
+			name := next.name + ", EOS page " + lost.name
+			data := slices.Concat(a[:eos.start], lost.page, next.data)
+			assertSamePCM(t, name, data, want48)
+			got16, _ := decodeAll(t, bytes.NewReader(data), DecodeOptions{SampleRate: 16000})
+			if len(got16) != len(want16) || maxAbsDiff(got16, want16) != 0 {
+				t.Fatalf("%s: 16 kHz decode differs", name)
+			}
+			src, err := ReadPackets(bytes.NewReader(data))
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			assertSamePackets(t, name, src.Packets, wantSrc.Packets)
+			_, dec := decodeAll(t, bytes.NewReader(data), DecodeOptions{KeepNative: true})
+			kept := dec.Source()
+			assertSamePackets(t, name+", Source", kept.Packets, wantSrc.Packets)
+			if len(kept.Native) != len(wantNative) || maxAbsDiff(kept.Native, wantNative) != 0 {
+				t.Fatalf("%s: %d native samples for %v", name, len(kept.Native), kept.Duration())
+			}
+		}
+		if next.name == "new serial" {
+			if len(want48) != len(wantA)+len(wantB) || maxAbsDiff(want48, slices.Concat(wantA, wantB)) != 0 {
+				t.Fatalf("%d samples, want the two links' %d + %d", len(want48), len(wantA), len(wantB))
+			}
+		}
+	}
+}
+
+// Cut sees the file with a lost EOS page on one timeline too. The first
+// link's last packet has nothing left to trim, so only the second link's
+// pre-skip becomes a synthetic stretch between them, and the first link's
+// audio is copied exactly.
+func TestCutChainedOggWithLostEOSPage(t *testing.T) {
+	a := readFixture(t, "ogg-celt-fb.opus")
+	b := readFixture(t, "ogg-silk-wb.opus")
+	pagesA := oggPages(t, a)
+	eos := pagesA[len(pagesA)-1]
+	data := slices.Concat(a[:eos.start+eos.size-1], []byte{a[eos.start+eos.size-1] ^ 0x01}, b)
+	direct, dec := decodeAll(t, bytes.NewReader(data), DecodeOptions{KeepPackets: true})
+	src := dec.Source()
+	firstB := len(sourceFor(t, "ogg-celt-fb.opus").Packets) - 1
+	linkA := src.Packets[firstB-1].End()
+	if src.Packets[firstB-1].Trim != 0 || src.Packets[firstB].Skip != 312 || src.Packets[firstB].Start != linkA {
+		t.Fatalf("boundary packets %+v %+v", src.Packets[firstB-1], src.Packets[firstB])
+	}
+	if durationToSamples(src.Duration()) != int64(len(direct)) || len(direct) != 143688+144000 {
+		t.Fatalf("source covers %v, decoder produced %d samples", src.Duration(), len(direct))
+	}
+	out, err := Cut(src, Edit{Keep: []Interval{{0, src.Duration()}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	skip := samplesToDuration(312)
+	assertSpans(t, out, []Span{
+		{Out: 0, In: 0, Length: samplesToDuration(linkA)},
+		{Out: samplesToDuration(linkA), Length: skip, Synthetic: true},
+		{Out: samplesToDuration(linkA) + skip, In: samplesToDuration(linkA), Length: 3000 * ms},
+	})
+	pcm := decodeStream(t, out, FormatOgg)
+	if int64(len(pcm)) != durationToSamples(out.Duration()) || maxAbsDiff(pcm[:linkA], direct) != 0 {
+		t.Fatalf("cut decodes to %d samples for %v, first link differs by %g", len(pcm), out.Duration(), maxAbsDiff(pcm[:linkA], direct))
+	}
+}
+
+// assertSamePackets requires two packet lists to match field by field.
+func assertSamePackets(t *testing.T, name string, got, want []Packet) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("%s: %d packets, want %d", name, len(got), len(want))
+	}
+	for i := range want {
+		g, w := got[i], want[i]
+		if !bytes.Equal(g.Data, w.Data) || g.Start != w.Start || g.Duration != w.Duration || g.Skip != w.Skip || g.Trim != w.Trim {
+			t.Fatalf("%s: packet %d is %+v, want %+v", name, i, g, w)
+		}
+	}
+}

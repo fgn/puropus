@@ -2,6 +2,7 @@ package ogg
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -344,4 +345,111 @@ func TestCorruptPageOfTheSelectedStreamDropsSpanningPacket(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectPackets(t, "intact", got, [][]byte{head, a0, big, a1, next, a2})
+}
+
+// RFC 3533 places all BOS pages of a link before its other pages. So when the
+// EOS page of a chained link is lost (corrupt, missing, or cut short where
+// another file was appended), a BOS page after the stream's data starts the
+// next link: the reader ends the link there and selects from the new one, as
+// it would after the EOS page, with or without a new serial number. FFmpeg
+// decodes the next link too.
+func TestLostEOSPageEndsLinkAtNextBOSPage(t *testing.T) {
+	head1, p1, p2, p3 := []byte("head-1"), []byte("packet-1"), []byte("packet-2"), []byte("packet-3")
+	head2, q1, q2 := []byte("head-2"), []byte("packet-q1"), []byte("packet-q2")
+	big := spanningPacket(600) // left open by the lost EOS page
+	link1 := func(serial uint32) [][]byte {
+		return [][]byte{
+			pageSpec{serial: serial, flags: FlagBOS, pieces: [][]byte{head1}}.bytes(t),
+			pageSpec{serial: serial, sequence: 1, granule: 960, pieces: [][]byte{p1, p2, big[:510]}, open: true}.bytes(t),
+			pageSpec{serial: serial, sequence: 2, flags: FlagContinued | FlagEOS, granule: 2880, pieces: [][]byte{big[510:], p3}}.bytes(t),
+		}
+	}
+	link2 := func(serial uint32) []byte {
+		return bytes.Join([][]byte{
+			pageSpec{serial: serial, flags: FlagBOS, pieces: [][]byte{head2}}.bytes(t),
+			pageSpec{serial: serial, sequence: 1, granule: 960, pieces: [][]byte{q1}}.bytes(t),
+			pageSpec{serial: serial, sequence: 2, flags: FlagEOS, granule: 1920, pieces: [][]byte{q2}}.bytes(t),
+		}, nil)
+	}
+	// The second link groups a stream the selector rejects, BOS page first.
+	grouped := bytes.Join([][]byte{
+		pageSpec{serial: 3, flags: FlagBOS, pieces: [][]byte{[]byte("other")}}.bytes(t),
+		pageSpec{serial: 2, flags: FlagBOS, pieces: [][]byte{head2}}.bytes(t),
+		pageSpec{serial: 3, sequence: 1, granule: 960, pieces: [][]byte{filler(30, 3)}}.bytes(t),
+		pageSpec{serial: 2, sequence: 1, granule: 960, pieces: [][]byte{q1}}.bytes(t),
+		pageSpec{serial: 3, sequence: 2, flags: FlagEOS, granule: 1920, pieces: [][]byte{filler(30, 4)}}.bytes(t),
+		pageSpec{serial: 2, sequence: 2, flags: FlagEOS, granule: 1920, pieces: [][]byte{q2}}.bytes(t),
+	}, nil)
+	acceptHead := func(packet []byte) bool { return bytes.HasPrefix(packet, []byte("head")) }
+
+	want := [][]byte{head1, p1, p2, head2, q1, q2}
+	for _, tc := range []struct {
+		name     string
+		eos      func([]byte) []byte
+		serial   uint32 // of the second link
+		next     []byte // the second link, when not link2(serial)
+		selector func([]byte) bool
+	}{
+		{name: "corrupt", eos: func(p []byte) []byte { p[len(p)-1] ^= 1; return p }, serial: 2},
+		{name: "missing", eos: func([]byte) []byte { return nil }, serial: 2},
+		{name: "cut short", eos: func(p []byte) []byte { return p[:headerSize+5] }, serial: 2},
+		{name: "corrupt, same serial", eos: func(p []byte) []byte { p[len(p)-1] ^= 1; return p }, serial: 1},
+		{name: "corrupt, grouped next link", eos: func(p []byte) []byte { p[len(p)-1] ^= 1; return p }, next: grouped, selector: acceptHead},
+		{name: "corrupt, selector", eos: func(p []byte) []byte { p[len(p)-1] ^= 1; return p }, serial: 2, selector: acceptHead},
+	} {
+		first := link1(1)
+		first[2] = tc.eos(first[2])
+		next := tc.next
+		if next == nil {
+			next = link2(tc.serial)
+		}
+		r := NewReader(bytes.NewReader(append(bytes.Join(first, nil), next...)))
+		r.SetBOSSelector(tc.selector)
+		got, err := readAllPackets(r)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		expectPackets(t, tc.name, got, want)
+		if !got[3].BOS || got[2].EOS {
+			t.Fatalf("%s: second link's head BOS=%v, last packet of the first EOS=%v", tc.name, got[3].BOS, got[2].EOS)
+		}
+		if serial := cmp.Or(tc.serial, 2); got[3].Serial != serial || got[5].Serial != serial || !got[5].EOS {
+			t.Fatalf("%s: second link read from serial %d to %d, want %d", tc.name, got[3].Serial, got[5].Serial, serial)
+		}
+	}
+}
+
+// A BOS page only ends a link once the selected stream has had other pages.
+// Before that it opens another stream grouped into the same link, which is
+// skipped. After that, against RFC 3533, it still ends the link, as it does
+// with FFmpeg, which stops decoding the stream there too, even though the
+// stream's pages go on.
+func TestBOSPageEndsLinkOnlyAfterTheSelectedStreamsHeaders(t *testing.T) {
+	head, p1, p2 := []byte("head"), []byte("packet-1"), []byte("packet-2")
+	grouped := bytes.Join([][]byte{
+		pageSpec{serial: 1, flags: FlagBOS, pieces: [][]byte{head}}.bytes(t),
+		pageSpec{serial: 2, flags: FlagBOS, pieces: [][]byte{[]byte("other")}}.bytes(t),
+		pageSpec{serial: 1, sequence: 1, granule: 960, pieces: [][]byte{p1}}.bytes(t),
+		pageSpec{serial: 2, sequence: 1, flags: FlagEOS, granule: 960, pieces: [][]byte{filler(20, 2)}}.bytes(t),
+		pageSpec{serial: 1, sequence: 2, flags: FlagEOS, granule: 1920, pieces: [][]byte{p2}}.bytes(t),
+	}, nil)
+	got, err := readAllPackets(NewReader(bytes.NewReader(grouped)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectPackets(t, "grouped", got, [][]byte{head, p1, p2})
+
+	late := bytes.Join([][]byte{
+		pageSpec{serial: 1, flags: FlagBOS, pieces: [][]byte{head}}.bytes(t),
+		pageSpec{serial: 1, sequence: 1, granule: 960, pieces: [][]byte{p1}}.bytes(t),
+		pageSpec{serial: 2, flags: FlagBOS, pieces: [][]byte{[]byte("other")}}.bytes(t),
+		pageSpec{serial: 1, sequence: 2, flags: FlagEOS, granule: 1920, pieces: [][]byte{p2}}.bytes(t),
+	}, nil)
+	r := NewReader(bytes.NewReader(late))
+	r.SetBOSSelector(func(packet []byte) bool { return bytes.Equal(packet, head) })
+	got, err = readAllPackets(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectPackets(t, "late BOS page", got, [][]byte{head, p1})
 }
