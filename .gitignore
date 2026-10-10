@@ -1,0 +1,4 @@
+bin/
+*.prof
+*.test
+tools/**/build/

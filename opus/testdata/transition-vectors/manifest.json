@@ -1,0 +1,131 @@
+{
+  "schema": 1,
+  "libopus": "1.5.2",
+  "sample_rate": 48000,
+  "channels": 1,
+  "deep_plc": false,
+  "osce": false,
+  "fixed_point_build": false,
+  "generator_sha256": "eef061cb715e0f9e4b6df4a6c21da1267dc3403a6f33acc4b0437a4254d74856",
+  "runner_sha256": "3ececc386604de49e1e29de55426068b185f5e6cc27d0afe5c376ecbeb746c08",
+  "static_library_sha256": "307e770f67ccf0901d69e9f4459c7efd96804e182c901054e15b5422a7fc2f6e",
+  "decoder_source_sha256": "2f5ec53afdd25ba2ed9fab0c1b91d06c6070613d9b3b0059f6163b2061aa048b",
+  "config_sha256": "4127e057a04f534915063da6429de5ff06edb712ec52f3af3eeff5a59e9acf89",
+  "compiler": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "machine": "x86_64",
+  "deterministic_repeat_equal": true,
+  "observer_pcm_byte_equal": true,
+  "cases": [
+    {
+      "name": "loss-celt",
+      "records": 60,
+      "samples": 59520,
+      "json_sha256": "f6d7f256771ef393735565f88d3f9133450d22858360b26048eda7ea10030695",
+      "pcm_sha256": "031975f3c1a820bd711cefc40c29a2fb85fa361a6298f2f9483f403414611183",
+      "generic_pcm_sha256": "3be1100bd68412b172877070daaad66c54c5e815eb243ef948dcb0f9eec2cb60"
+    },
+    {
+      "name": "loss-hybrid",
+      "records": 60,
+      "samples": 59520,
+      "json_sha256": "2185a63fd4c0f0fbee8c838031636801586cb90cdf4415e9aa5943fa4b149723",
+      "pcm_sha256": "a76348a5cc3eac81b13fd2edd0d2eba22335ed9045df06ebe839c2afb8820427",
+      "generic_pcm_sha256": "9bbfe909b6170983ed2559f08ad5ff1c67e6b6ae8c70a6890570b59054804d31"
+    },
+    {
+      "name": "loss-silk",
+      "records": 60,
+      "samples": 59520,
+      "json_sha256": "922852fbb12a4b5b50d1bafa9d4f79656fb8e129ce9487df856b1e05fe36f929",
+      "pcm_sha256": "19e3a5d63fd7dd2a1b5d8e28d81ef84c2c32db756519f972c508e318b0ebe444",
+      "generic_pcm_sha256": "19e3a5d63fd7dd2a1b5d8e28d81ef84c2c32db756519f972c508e318b0ebe444"
+    },
+    {
+      "name": "transitions-cbr12",
+      "records": 84,
+      "samples": 80640,
+      "json_sha256": "312a17e37e143e617257ba2c815c3c78689fddde93ed64975b362ce26cc1a39d",
+      "pcm_sha256": "628d14d2073b228dc24b63d07271060c96040015fcf74eca9dffa2bb7b26d13d",
+      "generic_pcm_sha256": "5da89f1ce7cedbe6ae2b4770eb1845ee346c05a0b61bbf3ba7cd26f555ddca91"
+    },
+    {
+      "name": "transitions-cbr16",
+      "records": 84,
+      "samples": 80640,
+      "json_sha256": "7dedf11688b5d23dd801900980770e6ee3a7272532ab5b2035dcaed94865f3d7",
+      "pcm_sha256": "1e77403c74fbd9facab6d05eecb870e66b34820aeb4453f9a70303483458213a",
+      "generic_pcm_sha256": "4107985dfe59c455419e95991c36ebb462185fe835e54042115bfe9dbf87cae9"
+    },
+    {
+      "name": "loss-celt-2p5ms",
+      "records": 36,
+      "samples": 4320,
+      "json_sha256": "db7a7a5db9ef1e4b2240a88071c407eaf591db892b83a5a7f8c6de3db582bd60",
+      "pcm_sha256": "657e4eeb170dd1478e47024e2aaa4006e210b90c46cfe5f8ef2b374889955ce2",
+      "generic_pcm_sha256": "9561e777711cfd3ee841438a19d27461f687adaac4d60f2fcfd5648e5c41e78c"
+    },
+    {
+      "name": "loss-celt-5ms",
+      "records": 36,
+      "samples": 8640,
+      "json_sha256": "081e3f2a11d98f9ee7a9039deb97f93f682a573c4dd718289698bbe3d0182ba1",
+      "pcm_sha256": "846f05ab857f19b509f78e7a432726ff363ef72ff0d5347296ef4e4d2764e534",
+      "generic_pcm_sha256": "7e2bffad8932546f23e08e5847038c38df354e76e22b28d2129589f4304a7a2d"
+    },
+    {
+      "name": "loss-celt-long",
+      "records": 48,
+      "samples": 46080,
+      "json_sha256": "ccd0d4bdcdc262a34c8f3be8101aaf8b58f8ea7bb160fa025d4c904a33245ced",
+      "pcm_sha256": "fcddcf0426c4943542ccc3628bdc1693624f75afa60d2f4241f958d2c19cd9ed",
+      "generic_pcm_sha256": "d8d00048ceabd24bc8496d7ae1cdbc3d9d24cdf1d949586220cea03059df7f76"
+    },
+    {
+      "name": "loss-silk-mb10",
+      "records": 36,
+      "samples": 19680,
+      "json_sha256": "0e9b6362b4e0ce8e50c592342d9c4a61e5a233e89ce4273b65244615d9fc1b41",
+      "pcm_sha256": "f6693a0832dc1f2e2d7a0339a710ef4b5f236cfcd4ec6a029a9d13a12298912b",
+      "generic_pcm_sha256": "f6693a0832dc1f2e2d7a0339a710ef4b5f236cfcd4ec6a029a9d13a12298912b"
+    },
+    {
+      "name": "loss-silk-mb60",
+      "records": 36,
+      "samples": 103680,
+      "json_sha256": "87e134af2292adeecdeef10addde33489d99d8cedcb97bc15bf7a3c444d1852c",
+      "pcm_sha256": "b7696b0c0f1b6d697c3817bb80203ed3f121815b49a0e1d9f34f0f1a5ee8e180",
+      "generic_pcm_sha256": "b7696b0c0f1b6d697c3817bb80203ed3f121815b49a0e1d9f34f0f1a5ee8e180"
+    },
+    {
+      "name": "loss-silk-nb10",
+      "records": 36,
+      "samples": 19680,
+      "json_sha256": "729b059d53cea0997194de4fdd5b79651f6a545aef887a65314ae9bf7d70cc64",
+      "pcm_sha256": "2b06f785d1bbbd575d34fa381038d5c9c80b63e34c28cfe1f47903543be76afe",
+      "generic_pcm_sha256": "2b06f785d1bbbd575d34fa381038d5c9c80b63e34c28cfe1f47903543be76afe"
+    },
+    {
+      "name": "loss-silk-nb60",
+      "records": 36,
+      "samples": 103680,
+      "json_sha256": "08bcd88aff7d5597df8050ab60cf7f000d3fb8a7745ef8776efaf08ecffe114b",
+      "pcm_sha256": "7766c2071e7370b324251bc5ec38cda736ff313a133ba69a2724c534e48b17c7",
+      "generic_pcm_sha256": "7766c2071e7370b324251bc5ec38cda736ff313a133ba69a2724c534e48b17c7"
+    },
+    {
+      "name": "loss-silk-quiet-dtx",
+      "records": 120,
+      "samples": 115200,
+      "json_sha256": "bae7a9d670a90cb4e22395baabc2f5babddbf1590d1c6508ba7d4f84112854bc",
+      "pcm_sha256": "8f04cc1c5a36578e23657912afc311646f62edd12c75446053af1633f4645b35",
+      "generic_pcm_sha256": "8f04cc1c5a36578e23657912afc311646f62edd12c75446053af1633f4645b35"
+    }
+  ],
+  "extension": {
+    "generator_sha256": "7fa6c28b9915244629561ba67ca4f840baf228857fbb3bbf4961ab84d6f3df8f",
+    "runner_sha256": "85ce109624e7630feba1e21f16f8004fc3f85926a964ed7f68dec3c5cc0c1cc3",
+    "libopus_sha256": "307e770f67ccf0901d69e9f4459c7efd96804e182c901054e15b5422a7fc2f6e",
+    "deterministic_repeat_equal": true
+  },
+  "generic_pcm": "<name>.generic.f32le: the same packets and losses decoded by decode_float of the generic build (tools/libopus-ref/generic-vectors.sh)"
+}

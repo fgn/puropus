@@ -1,0 +1,6 @@
+# stem channels pre-skip trim: the decode_float options tools/packets/main.go prints
+ogg-celt-fb 1 312 648
+ogg-celt-fb-10ms 1 120 360
+webm-celt-20ms 1 0 0
+webm-celt-40ms 1 0 0
+webm-celt-60ms 1 0 0

@@ -1,0 +1,9 @@
+{
+  "source": "libopus 1.5.2 anti_collapse, scalar; synthetic band coefficients",
+  "libopus_sha256": "307e770f67ccf0901d69e9f4459c7efd96804e182c901054e15b5422a7fc2f6e",
+  "generator_sha256": "2ad8f6213d304e6ef465436dbeb003e75af4704e82c99444175f4284c43e151f",
+  "files": {
+    "anticollapse.input.f32le": "a839b742b65c4847143c1918a568a2da82386ec3ed6f634fe85d506e580ff243",
+    "anticollapse.output.f32le": "752c39690d132fe1e3249ef95a679c46a44089dfaed0f1afdaba1a052b0e1a7e"
+  }
+}

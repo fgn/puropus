@@ -1,0 +1,166 @@
+# https://taskfile.dev
+version: "3"
+
+env:
+  # The module needs Go 1.27; pin the toolchain so GOEXPERIMENT=simd is
+  # understood even when an older go is first on PATH.
+  GOTOOLCHAIN: go1.27.0
+
+vars:
+  # Directory of the Go 1.27 toolchain's go binary, so tools that shell out to
+  # `go` with GOEXPERIMENT set reach a toolchain that understands it.
+  GOBIN127:
+    sh: echo "$(GOTOOLCHAIN=go1.27.0 go env GOROOT)/bin"
+  GOLANGCI_LINT_VERSION: v2.13.1
+  GOVULNCHECK_VERSION: v1.7.0
+
+tasks:
+  install:gofumpt:
+    status:
+      - which gofumpt
+    preconditions:
+      - sh: which go
+        msg: "please, install go"
+    cmds:
+      - go install mvdan.cc/gofumpt@latest
+  install:golangci-lint:
+    status:
+      - test -x ./bin/golangci-lint
+      - ./bin/golangci-lint --version | grep -F '{{.GOLANGCI_LINT_VERSION | trimPrefix "v"}}'
+    cmds:
+      - >
+        curl -sSfL
+        https://raw.githubusercontent.com/golangci/golangci-lint/{{.GOLANGCI_LINT_VERSION}}/install.sh
+        | sh -s -- -b ./bin {{.GOLANGCI_LINT_VERSION}}
+  install:govulncheck:
+    status:
+      - which govulncheck
+      - "govulncheck -version | grep -E '^Go.*go1[.]27'"
+      - "govulncheck -version | grep -F 'Scanner: govulncheck@{{.GOVULNCHECK_VERSION}}'"
+    cmds:
+      - PATH="{{.GOBIN127}}:$PATH" go install golang.org/x/vuln/cmd/govulncheck@{{.GOVULNCHECK_VERSION}}
+
+  format:
+    desc: run all code formatters
+    cmds:
+      - task: install:gofumpt
+      - gofumpt -w .
+      - go mod edit -fmt
+      - go mod tidy
+
+  lint:golangci-lint:
+    cmds:
+      - task: install:golangci-lint
+      - PATH="{{.GOBIN127}}:$PATH" CGO_ENABLED=0 ./bin/golangci-lint run --timeout 180s
+  lint:golangci-lint:simd:
+    cmds:
+      - task: install:golangci-lint
+      - PATH="{{.GOBIN127}}:$PATH" CGO_ENABLED=0 GOEXPERIMENT=simd ./bin/golangci-lint run --timeout 180s
+  lint:govulncheck:
+    cmds:
+      - task: install:govulncheck
+      - PATH="{{.GOBIN127}}:$PATH" govulncheck ./...
+  lint:
+    desc: run all linters
+    cmds:
+      - task: lint:golangci-lint
+      - task: lint:golangci-lint:simd
+      - task: lint:govulncheck
+
+  test:
+    desc: run all tests with cgo disabled (scalar build)
+    cmds:
+      - CGO_ENABLED=0 go test {{ .CLI_ARGS | default "-count=1 -cover -timeout 120s ./..." }}
+  test:simd:
+    desc: run all tests with the Go SIMD experiment enabled (amd64)
+    cmds:
+      - CGO_ENABLED=0 GOEXPERIMENT=simd go test {{ .CLI_ARGS | default "-count=1 -timeout 120s ./..." }}
+  test:simd:noavx:
+    desc: run the SIMD dispatch tests under each CPU tier the resampler and SILK dispatch on
+    cmds:
+      # Each GODEBUG setting hides one more CPU feature, stepping the
+      # resampler's kernel down from AVX-512 (where present) through
+      # AVX2+FMA, AVX2 and AVX to scalar; TestTierMatchesCPU checks the
+      # selection, the kernel and golden tests the output, and the root
+      # package's preemption test the vector state under each kernel.
+      # GOAMD64=v3 builds cannot hide AVX, AVX2 or FMA, so this runs the
+      # default GOAMD64=v1 build.
+      - for: ["", "cpu.avx512f=off", "cpu.avx512f=off,cpu.fma=off", "cpu.avx512f=off,cpu.avx2=off", "cpu.avx=off"]
+        cmd: >
+          CGO_ENABLED=0 GOAMD64=v1 GODEBUG={{.ITEM}} GOEXPERIMENT=simd go test -count=1 -timeout 120s
+          ./internal/resample -run 'TestTierMatchesCPU|TestAcceleration|TestKernelsMatchScalar|TestNoAVXFallsBackToScalar|TestFFmpeg|TestRepositoryGoldens|TestChunkInvariance'
+      - for: ["", "cpu.avx512f=off", "cpu.avx512f=off,cpu.fma=off", "cpu.avx512f=off,cpu.avx2=off", "cpu.avx=off"]
+        cmd: CGO_ENABLED=0 GOAMD64=v1 GODEBUG={{.ITEM}} GOEXPERIMENT=simd go test -count=1 -timeout 120s . -run 'TestDecodeSurvivesPreemption|TestDecodeMatchesReferenceAt16kHz'
+      # The SILK kernels (AVX or scalar): selection, kernels against their
+      # scalar code and libopus's loops, fixtures, and preemption.
+      - for: ["", "cpu.avx512f=off", "cpu.avx512f=off,cpu.fma=off", "cpu.avx512f=off,cpu.avx2=off", "cpu.avx=off"]
+        cmd: >
+          CGO_ENABLED=0 GOAMD64=v1 GODEBUG={{.ITEM}} GOEXPERIMENT=simd go test -count=1 -timeout 120s
+          ./opus/internal/silk -run 'TestTierMatchesCPU|TestKernelsMatchScalar|Matches|TestOggFixtures|TestResampler|TestDecodeSurvivesPreemption'
+      - for: ["", "cpu.avx512f=off", "cpu.avx512f=off,cpu.fma=off", "cpu.avx512f=off,cpu.avx2=off", "cpu.avx=off"]
+        cmd: CGO_ENABLED=0 GOAMD64=v1 GODEBUG={{.ITEM}} GOEXPERIMENT=simd go test -count=1 -timeout 120s ./opus -run 'TestSilkPCM'
+      # The CELT kernels need AVX2 (scalar below it): the package's tests,
+      # including the kernels against the scalar code and the tier check,
+      # and in package opus the bit-identical decode under preemption and
+      # the reference sequences, at each tier.
+      - for: ["", "cpu.avx512f=off", "cpu.avx512f=off,cpu.avx2=off", "cpu.avx512f=off,cpu.avx2=off,cpu.fma=off", "cpu.avx512f=off,cpu.avx2=off,cpu.fma=off,cpu.avx=off"]
+        cmd: >
+          CGO_ENABLED=0 GOAMD64=v1 GODEBUG={{.ITEM}} GOEXPERIMENT=simd go test -count=1 -timeout 120s
+          ./opus/internal/celt ./opus -run 'Test(TierMatchesCPU|.*AVX2.*|.*Libopus|DecodeSurvivesPreemption|TransitionVectors|StereoReferenceVectors|DecodeDoesNotAllocate)'
+  refs:
+    desc: build the libopus reference tools (C; set OPUS_SRC and OPUS_BUILD, see tools/libopus-ref/README.md)
+    cmds:
+      - make -C tools/libopus-ref
+  test:official:
+    desc: verify mono SILK/hybrid entropy and counts against the official RFC corpus
+    preconditions:
+      - sh: test -n "$OPUS_TEST_VECTORS" && test -d "$OPUS_TEST_VECTORS"
+        msg: "Set OPUS_TEST_VECTORS to the extracted RFC 8251 opus_newvectors directory"
+    cmds:
+      - CGO_ENABLED=0 go test -count=1 ./opus -run TestOfficialOpusVectors -v
+      - CGO_ENABLED=0 GOEXPERIMENT=simd go test -count=1 ./opus -run TestOfficialOpusVectors -v
+  test:386:
+    desc: run all tests with a 32-bit int
+    cmds:
+      - CGO_ENABLED=0 GOARCH=386 go test {{ .CLI_ARGS | default "-count=1 -timeout 300s ./..." }}
+  vet:cross:
+    desc: vet the build for other operating systems and architectures
+    cmds:
+      - for: [linux/arm64, darwin/arm64, windows/amd64, linux/riscv64, linux/s390x, wasip1/wasm]
+        cmd: CGO_ENABLED=0 GOOS={{dir .ITEM}} GOARCH={{base .ITEM}} go vet ./...
+  test:race:
+    desc: run the tests under the race detector (needs cgo)
+    cmds:
+      - go test -race {{ .CLI_ARGS | default "-count=1 -timeout 300s ./..." }}
+  fuzz:
+    desc: run the container, packet and codec fuzz targets briefly
+    cmds:
+      - CGO_ENABLED=0 go test ./internal/ogg -run '^$' -fuzz FuzzReader -fuzztime {{ .FUZZTIME | default "20s" }}
+      - CGO_ENABLED=0 go test ./internal/webm -run '^$' -fuzz FuzzReader -fuzztime {{ .FUZZTIME | default "20s" }}
+      - CGO_ENABLED=0 go test ./opus -run '^$' -fuzz FuzzParse -fuzztime {{ .FUZZTIME | default "20s" }}
+      - CGO_ENABLED=0 go test ./opus -run '^$' -fuzz FuzzDecode -fuzztime {{ .FUZZTIME | default "20s" }}
+      - CGO_ENABLED=0 go test ./opus/internal/celt -run '^$' -fuzz FuzzDecodeWithEC -fuzztime {{ .FUZZTIME | default "20s" }}
+      - CGO_ENABLED=0 go test ./opus/internal/silk -run '^$' -fuzz FuzzDecode -fuzztime {{ .FUZZTIME | default "20s" }}
+  bench:
+    desc: run the decode benchmarks on the committed fixtures
+    cmds:
+      - CGO_ENABLED=0 GOEXPERIMENT=simd go test . -run '^$' -bench . -benchmem {{.CLI_ARGS}}
+
+  ci:
+    desc: formatters check, linters, and tests in both builds
+    cmds:
+      - task: install:gofumpt
+      - test -z "$(gofumpt -l .)" || (gofumpt -l . && exit 1)
+      - task: lint
+      - task: test
+      - task: test:386
+      - task: test:simd
+      - task: test:simd:noavx
+      - task: vet:cross
+  all:
+    desc: format, lint, and test
+    cmds:
+      - task: format
+      - task: lint
+      - task: test
+      - task: test:simd

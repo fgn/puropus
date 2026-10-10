@@ -1,0 +1,48 @@
+version: "2"
+
+run:
+  timeout: 3m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - gocritic
+    - misspell
+    - nilerr
+    - nolintlint
+    - prealloc
+    - revive
+    - unconvert
+    - unparam
+  settings:
+    revive:
+      rules:
+        - name: exported
+          arguments: [disableStutteringCheck]
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [unparam, revive, gocritic]
+      # Ports of libopus keep its control flow and signatures.
+      - path: opus/internal/(celt|silk|entcode)/
+        text: "cognitive|cyclomatic|ifElseChain|QF1003"
+      - path: opus/internal/silk/
+        linters: [unparam]
+      # The CELT port keeps libopus's capitalized names (X, N, LM, C, M, T0).
+      - path: opus/internal/celt/
+        text: "captLocal"
+      # The port of src/opus_decoder.c keeps libopus's conditions and the
+      # signature of smooth_fade.
+      - path: opus/decoder\.go
+        text: "QF1001"
+      - path: opus/decoder\.go
+        linters: [unparam]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports

@@ -1,0 +1,349 @@
+{
+  "ffmpeg": "ffmpeg version n9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+  "fixtures": {
+    "ogg-celt-fb-10ms.opus": {
+      "samples48": 144000,
+      "samples16": 48000,
+      "bytes": 37016,
+      "sha256": "98a9411ad50e9be2bf35131566457e91bd4c5a23fc99756eb690654f4b136287",
+      "reference": "libopus 1.5.2 float API (opus_decode_float, tools/libopus-ref/decode_float on the static float build, git tag v1.5.2); FFmpeg 48-to-16 kHz resampling of it",
+      "pcm48": "ogg-celt-fb-10ms.libopus48.f32le",
+      "pcm48_sha256": "7ae1ca6d9ff6a9c7fec51a7dc3260fe69d3fd8f6b7657eb8bc9cde22948d3c4e",
+      "pcm16_sha256": "e8445a149b1280cac6eccfd55857121dedbb26d47ec1d3f9c051fdfbcb1140a7",
+      "full48": true,
+      "ffmpeg48": "ogg-celt-fb-10ms.48k.json: FFmpeg n9.0.2 native CELT decoder checkpoints, a secondary comparison only"
+    },
+    "ogg-celt-fb.opus": {
+      "samples48": 144000,
+      "samples16": 48000,
+      "bytes": 26750,
+      "sha256": "9635a3d344b895f04893c1557b0307de50507b5a23bee6168f0081a5cf069ec0",
+      "reference": "libopus 1.5.2 float API (opus_decode_float, tools/libopus-ref/decode_float on the static float build, git tag v1.5.2); FFmpeg 48-to-16 kHz resampling of it",
+      "pcm48": "ogg-celt-fb.libopus48.f32le",
+      "pcm48_sha256": "2cd4a380b2701273bd0ae340ba1a7806dc0edb0397c7fb576b87ec3dda69431f",
+      "pcm16_sha256": "e563ca48e0912229e58e44de40f43c053ba22c44032c393c71dc4072ab8b4dd8",
+      "full48": true,
+      "ffmpeg48": "ogg-celt-fb.48k.json: FFmpeg n9.0.2 native CELT decoder checkpoints, a secondary comparison only"
+    },
+    "ogg-hybrid-fb-10ms.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 8125,
+      "configurations": [
+        14
+      ],
+      "sha256": "8309684389e9fcaa4afce600a3a5f27ae03785756a61d9621fbd1e501fe793c8",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "e041208b81e0f78050d13aefeb67e5edc5b9ba229475807990506993f2dd2be9",
+      "pcm16_sha256": "d8a8ee769b29127a59370577e3d11ea79bd31897bb587ba6bf09599570957fc4",
+      "full48": true
+    },
+    "ogg-hybrid-fb-fec.opus": {
+      "samples48": 144000,
+      "samples16": 48000,
+      "bytes": 15665,
+      "configurations": [
+        15
+      ],
+      "sha256": "3164077789776ddb508e17d16d1f77a747b4d534164df7291ec88effffad124a",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "25169407bbb1671efaaf5e24bc94d6e8ffe4f4d5ea70c37ccb2b341e5f9231d1",
+      "pcm16_sha256": "2f4d4b600286ca1ac2f6f1673e547e8ee713a4772b5f4811b551980655416167",
+      "full48": true
+    },
+    "ogg-hybrid-swb-10ms.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 6528,
+      "configurations": [
+        12
+      ],
+      "sha256": "ee84f23c89ed19cbd63d8775f64d9010bb8731d2c981899b09953c8d82574f93",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "3991c7398b337becfdf31236ba53305e274aeeee7261cabd2bc2283fdcf952ac",
+      "pcm16_sha256": "72deb408029e6a15697b335a2ac51005b9a490ffbb3e450f0e28ea21c7415426",
+      "full48": true
+    },
+    "ogg-hybrid-swb.opus": {
+      "samples48": 144000,
+      "samples16": 48000,
+      "bytes": 11118,
+      "configurations": [
+        13
+      ],
+      "sha256": "488c1e07e7ac5baa25e961d70a8a3fbd95653f64109128711ab60aec9b153c27",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "930e2913c5ca7417ac71f78566648b8628297d6576c85a8bf50b9f255b2949c3",
+      "pcm16_sha256": "3ca7d2e036899324f41defb75b16a427782673292c3c2acb4d5fce6c7552d07f",
+      "full48": true
+    },
+    "ogg-silk-mb-10ms.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 3587,
+      "configurations": [
+        4
+      ],
+      "sha256": "14828e1ece030777152fa517fca1997b6188da161b1a1020fa64ed7b5801f0a6",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "badc88dd06674741c153118925d234a5f460e7e42a00eb30ac4d892e4e582432",
+      "pcm16_sha256": "510d0f2ec694bda062b74ef4446361bf0f008f71a2b151b97306cccea2a91f8a",
+      "full48": true
+    },
+    "ogg-silk-mb.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 2736,
+      "configurations": [
+        5
+      ],
+      "sha256": "aa676c8fb63d1d0efb15ed8a964249f0d791af8d7c2163c4d468aaa685d13e5d",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "bbf2640f8da85f08b2a2972d083b1766e9c928ce59e938b72c83b0d8c084c807",
+      "pcm16_sha256": "e7d2b6fc45259bfbb4643bb0a75d43d7375770c4e2064fcd56d021293fee6afe",
+      "full48": true
+    },
+    "ogg-silk-nb-60ms.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 2168,
+      "configurations": [
+        3
+      ],
+      "sha256": "d729488e86cb28f17c340bb2dddc6bca26d54992da0e8827cfd60c7b41e6e4ed",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "39d74d2f0c9c8e45dbff9410bc50ab9cb34d9466df85346b6e908bb5a302fc7d",
+      "pcm16_sha256": "a347f6ea27f1fce82fe5acdbcb52c03e323bc08428c1d275dd0b6e776f88dedb",
+      "full48": true
+    },
+    "ogg-silk-nb.opus": {
+      "samples48": 48000,
+      "samples16": 16000,
+      "bytes": 1355,
+      "configurations": [
+        1
+      ],
+      "sha256": "42189d1efebe147f6408fa823bfff2264eec8bce9436df1795152a330db77ae4",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "8a1f728619fe9ad4c194203f741871706b6db8d6744004f1edad9b2fdf0504ba",
+      "pcm16_sha256": "090dd68a2628ac4929b1023666f72c45561389f61a0339f253ef8bcbbc99da42",
+      "full48": true
+    },
+    "ogg-silk-wb-10ms.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 4359,
+      "configurations": [
+        8
+      ],
+      "sha256": "81f52248bb7ee288e9fa3069992822ca507464db09cdd35fb7234bec91d1c229",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "68e0fa35baca9b5555e94fa1a9efe75cce9a78a49baea386537844c452aed220",
+      "pcm16_sha256": "43bc5fce4109bf8f586679428eea1df62b7a8f5a625fb637f062a1bb3bf8a10e",
+      "full48": true
+    },
+    "ogg-silk-wb-40ms.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 3864,
+      "configurations": [
+        10
+      ],
+      "sha256": "5b4249671e6149fc4933d4ff6af946e1f8ba518bfc00855bf7a630cb64f8cae4",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "4ca54d7f64e14928e2fad7226bdd885616221a169a1677ab80feb84a829fc78a",
+      "pcm16_sha256": "e99bb56078929c5d879b6652698bb91e63fb14672ee932f38470000716b3597a",
+      "full48": true
+    },
+    "ogg-silk-wb-60ms.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 3733,
+      "configurations": [
+        11
+      ],
+      "sha256": "0778c0822437d7823c0f955135778926707b7ff55b7246d3a49f06e7317916fd",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "874a6f524f7a1396f4488a2c37ae079776f944e5d0f7d48da8ddac63c3892039",
+      "pcm16_sha256": "baed00d6724754cebae01309ce09f07e990dd6c8fe266ca10d9e94d7b492270b",
+      "full48": true
+    },
+    "ogg-silk-wb-fec.opus": {
+      "samples48": 144000,
+      "samples16": 48000,
+      "bytes": 9689,
+      "configurations": [
+        9
+      ],
+      "sha256": "d8db66ef252004a6437dfafd15a02bb5817a9420f6f26514a368dc7a3433bb95",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "e9d1d708e2a79b62a76ba82ec56fe72e9f394493f14408c40535197805d15589",
+      "pcm16_sha256": "94ed780fb55bdcecceafe607aff5770b85946d08297eca47fde1ba9ba9ac5ff5",
+      "full48": true
+    },
+    "ogg-silk-wb.opus": {
+      "samples48": 144000,
+      "samples16": 48000,
+      "bytes": 6683,
+      "configurations": [
+        9
+      ],
+      "sha256": "6f0fc86bac6b7487795d7b061bab6336e7ac74c3b9a5503feafb8c7e2fd8603d",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "5437ed810c940123364d120d0f70a6817739848d4b6a7f6ae2a7591d573a1d9e",
+      "pcm16_sha256": "d7f2056c3ebbb0b704528f07f30836bd837ebb5715f32f9ac489b1188e22ac23",
+      "full48": true
+    },
+    "webm-celt-20ms.webm": {
+      "samples48": 144000,
+      "samples16": 48000,
+      "bytes": 25394,
+      "sha256": "a55ea684cf71e142280ccd0b53514ccaf367a854821ff50609127869dac417c5",
+      "reference": "libopus 1.5.2 float API (opus_decode_float, tools/libopus-ref/decode_float on the static float build, git tag v1.5.2); FFmpeg 48-to-16 kHz resampling of it",
+      "pcm48": "webm-celt-20ms.libopus48.f32le",
+      "pcm48_sha256": "a23c25e18dd38352575f32f250fefbf7865e5742d48e22a7fd61a78bba8730b7",
+      "pcm16_sha256": "55dd19c0036cb62e991f2d8f0354cd8545a2e7bf07b6b2193fc355f9490804b8",
+      "full48": true,
+      "ffmpeg48": "webm-celt-20ms.48k.json: FFmpeg n9.0.2 native CELT decoder checkpoints, a secondary comparison only"
+    },
+    "webm-celt-40ms.webm": {
+      "samples48": 144000,
+      "samples16": 48000,
+      "bytes": 24631,
+      "sha256": "eb9ed01d84b0c5c9883ad333b401e129502f1f75565d43d6f25faceb62d0b9f9",
+      "reference": "libopus 1.5.2 float API (opus_decode_float, tools/libopus-ref/decode_float on the static float build, git tag v1.5.2); FFmpeg 48-to-16 kHz resampling of it",
+      "pcm48": "webm-celt-40ms.libopus48.f32le",
+      "pcm48_sha256": "b2f64261b23e099298e07078b478e1e576b58aae521140ebfcc3536745313377",
+      "pcm16_sha256": "313025ef5e2653d1a7c820086f915a438ace7671e1e468971e8bf9b6a150ca33",
+      "full48": true,
+      "ffmpeg48": "webm-celt-40ms.48k.json: FFmpeg n9.0.2 native CELT decoder checkpoints, a secondary comparison only"
+    },
+    "webm-celt-60ms.webm": {
+      "samples48": 144000,
+      "samples16": 48000,
+      "bytes": 24481,
+      "sha256": "721040b40deac5abdd3d19f96bd07a7c88b206bb1ca6df078e38207bddc1b94e",
+      "reference": "libopus 1.5.2 float API (opus_decode_float, tools/libopus-ref/decode_float on the static float build, git tag v1.5.2); FFmpeg 48-to-16 kHz resampling of it",
+      "pcm48": "webm-celt-60ms.libopus48.f32le",
+      "pcm48_sha256": "b2f64261b23e099298e07078b478e1e576b58aae521140ebfcc3536745313377",
+      "pcm16_sha256": "313025ef5e2653d1a7c820086f915a438ace7671e1e468971e8bf9b6a150ca33",
+      "full48": true,
+      "ffmpeg48": "webm-celt-60ms.48k.json: FFmpeg n9.0.2 native CELT decoder checkpoints, a secondary comparison only"
+    },
+    "ogg-silk-mb-40ms.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 3081,
+      "configurations": [
+        6
+      ],
+      "sha256": "8a67fbec9eb0952616be75d55a853803a2747f3aa24ae68aa8822e9b94e53297",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "da52344e209469d33a542609ae3187877a70c1596dd35e5244572a250e62544b",
+      "pcm16_sha256": "f1a9313ccf17f290be260b86d06d898eae4076c16feca9fdfdbb0feda17aac10",
+      "full48": true
+    },
+    "ogg-silk-mb-60ms.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 2978,
+      "configurations": [
+        7
+      ],
+      "sha256": "1f2c640b28d6f98b266a1871d4e132e7bc64ceeffd2825f1df01269e2aad4240",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "433425300b899d05ce5da6f98890edb4c55f72f8d4be701dd48dcd62a601f007",
+      "pcm16_sha256": "b0eeed3e146bb90939a05c0cb31e0d3111d7296d4a2312c18809169eba1e950f",
+      "full48": true
+    },
+    "ogg-silk-mb-fec.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 3877,
+      "configurations": [
+        5
+      ],
+      "sha256": "71ddfaac8a2a7e5449f7f4d19d215b3364ea642d40e1c28fd627546b75272d1e",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "aed06ce93ba19b0260ba418e58a78183e16ee946a70ce731d96e874c05ecf112",
+      "pcm16_sha256": "384ef19917a4f193d1dc6487cb5efdf6c04cbfc76bad96c270d8bc6757010954",
+      "full48": true
+    },
+    "ogg-silk-nb-10ms.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 2750,
+      "configurations": [
+        0
+      ],
+      "sha256": "cb584a1d394510f285aa125422fab3eedb582e400f611e1c93784fd67e7da52f",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "22949a9f5ca493ce0a9f5743ec6257844a3d22937c2abcf235f47f18022a3669",
+      "pcm16_sha256": "0116d7be28ff5adf4e742951bfbe0fedf6228ffd85861bd10d16cd5868dd444c",
+      "full48": true
+    },
+    "ogg-silk-nb-40ms.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 2238,
+      "configurations": [
+        2
+      ],
+      "sha256": "ed2737142345b2d3f756cadc0b39f9ec1f67f55fec5a8c7c59a18bf654c657ff",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "49ff114cefecbe5b85c5bfd064b36c2c73baf620edc9ed0a4de14d026818264a",
+      "pcm16_sha256": "7e0a6db0582132131c60bbb07ac4ec2093586bd5f4ff9bec45643b10f379cef0",
+      "full48": true
+    },
+    "ogg-silk-nb-fec.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 3418,
+      "configurations": [
+        1
+      ],
+      "sha256": "6912f486e42e20124ba9146b4493da2874a279af899ea8976d2a4b2295bd3b47",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "8c83455eba849087355d3b305f926843e1015ba85ee757f64a5e39f5f7d4693f",
+      "pcm16_sha256": "873b4caae298b841ab229da1344461086dc94b4afcfc1c231240ce6444eca74c",
+      "full48": true
+    },
+    "ogg-silk-wb-60ms-fec.opus": {
+      "samples48": 72000,
+      "samples16": 24000,
+      "bytes": 5266,
+      "configurations": [
+        11
+      ],
+      "sha256": "731d7e4fe82341189f79a387b270aee8b33d95693e515785c321fc4122527828",
+      "reference": "libopus float API via FFmpeg -request_sample_fmt flt; FFmpeg 48-to-16 kHz output resampler",
+      "pcm48_sha256": "ead3b3f0c91e583f8f00088a0a030d0bae83c8926669d2adc424b9752256682f",
+      "pcm16_sha256": "75e3260111984c9dfb967a269fbfeb43a40fc012d8714b2500e7f135eb9cd4a7",
+      "full48": true
+    }
+  },
+  "other": {
+    "ogg-switch-silk-celt-wb.opus": "libopus 1.4 encoder with OPUS_SET_FORCE_MODE per frame (SSSSSccccc: SILK WB / CELT WB), VBR 40 kb/s, 40 frames, pre-skip 0; golden ogg-switch-silk-celt-wb.libopus48.f32le is libopus's own decode (opus_decode_float), not FFmpeg's",
+    "ogg-grouped-vorbis-opus.ogg": "ffmpeg grouped Ogg with a Vorbis stream (BOS first) and an Opus stream; ogg-grouped-opus-only.opus is the same Opus stream alone (-c copy)",
+    "ogg-celt-short.opus": "ffmpeg 6.1.1 libopus (-b:a 48k -frame_duration 20 -application audio, bitexact) of 41.7 ms of a synthetic chirp (lavfi aevalsrc 0.3*sin(2*PI*(220+1800*t)*t)+0.02*sin(2*PI*3100*t)), three CELT FB packets: headers plus a single audio page whose granule trims the last packet; FFmpeg decodes 2002 samples at 48 kHz and 667 at 16 kHz",
+    "silk configurations": "Synthetic mono libopus voip encodes covering SILK configs 0-11 and hybrid configs 12-15, including NB/MB/WB in-band FEC and WB 60 ms FEC. Full PCM at 48 and 16 kHz; libopus 1.4 via FFmpeg 6.1.1 libopus decoder, then FFmpeg 48-to-16 kHz resampling. No time shifts or edge exclusions. FFmpeg native SILK PCM is superseded because it fails official RFC8251 waveform comparisons. The 16 kHz resampling and every CELT golden were regenerated with FFmpeg n9.0.2 (built from source with x86 assembly, so the FMA3 deemphasis and postfilter kernels run) and are byte-identical to the FFmpeg 6.1.1 originals.",
+    "ogg-silk-wb-60ms-fec.opus": {
+      "source": "synthetic libopus mono SILK; WB 60 ms, FEC 30%, 24 kb/s",
+      "sha256": "731d7e4fe82341189f79a387b270aee8b33d95693e515785c321fc4122527828",
+      "entropy": "libopus 1.5.2; silk_Decode entropy, gain, NLSF, LPC and raw integer synthesis after every regular frame",
+      "pcm": "libopus 1.4; complete 48 kHz PCM"
+    },
+    "ogg-silk-bandwidth-switch.opus": {
+      "source": "synthetic libopus mono SILK; 20 ms WB/MB/NB/MB/WB bandwidth schedule, 140 frames per stage, pre-skip 0",
+      "sha256": "4b245d4aca568ad73aa02b53375785141646e1f7ebc4fceb925bcefd934bcbfd",
+      "entropy": "libopus 1.5.2; silk_Decode entropy, gain, NLSF, LPC and raw integer synthesis after every regular frame",
+      "pcm": "libopus 1.4; complete 48 kHz PCM"
+    },
+    "silk-units.json": {
+      "source": "libopus 1.5.2 SILK raw synthesis and resampler, libopus 1.4 opus_decode_float for the existing hybrid unit packet",
+      "sha256": "b77701ba7967bc89a1f5ffdaf4ab38cd281fc404ef13a99aaab86ab4d7322cb2"
+    },
+    "celt goldens": "The CELT fixtures (ogg-celt-fb, ogg-celt-fb-10ms, webm-celt-20ms/40ms/60ms) are gated against libopus: <stem>.libopus48.f32le is libopus 1.5.2 (git tag v1.5.2) opus_decode_float output after the container pre-skip and end trimming (tools/libopus-ref/gen-goldens.sh), and <stem>.16k.f32le is its 48-to-16 kHz resampling by ffmpeg version n9.0.2 Copyright (c) 2000-2026 the FFmpeg developers. The FFmpeg native CELT checkpoints <stem>.48k.json are kept as a secondary comparison whose distance is only reported."
+  },
+  "libopus": "libopus 1.5.2 (git tag v1.5.2)"
+}

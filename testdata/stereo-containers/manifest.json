@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "source": "stock libopus stereo PCM, trim 317 leading and 269 trailing samples per channel, FFmpeg FLT 48-to-16 kHz",
+  "ffmpeg": "ffmpeg version n9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+  "input_sha256": {
+    "channels-silk-fec": "0217da67c68ecd5380f72cf8012fa680d5f8a7e3747f8bf6b305c1ec21dd34ac",
+    "channels-hybrid-fec": "1119f23abae870fb6b3025ba74c933c69b1e8a5770ced88a6fba84b70a99779b",
+    "channels-celt": "b9496c8beb870fd34e8571ba045129797299c24f01730e7f82e2cafe1a1b9b62",
+    "modes": "49416324c5d8005a5e3c99095634ed3aedc85110c7042a2302f1973c28ef8b68"
+  },
+  "files": {
+    "channels-silk-fec.16k.f32le": "5c7109ae3c073a1fcb3fe9c9f2a581264f14d61d960a6e73e193f9690c826c6a",
+    "channels-hybrid-fec.16k.f32le": "258459e7f09df5c03420ffea31cffa39e9369e161a93d358164b618f1da94106",
+    "channels-celt.16k.f32le": "61b5164f1160a27c1a6cc98358083c4cda82e937acb511847f44c8045931fa53",
+    "modes.16k.f32le": "e62968c1ccf2ba65e5f031ab86e4f471b732e5df9dc47558be634c2e90bc6ec2"
+  }
+}

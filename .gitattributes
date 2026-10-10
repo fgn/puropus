@@ -1,0 +1,4 @@
+# Fixtures are compared byte for byte and by hash; never convert line endings.
+testdata/** -text
+opus/testdata/** -text
+internal/resample/testdata/** -text

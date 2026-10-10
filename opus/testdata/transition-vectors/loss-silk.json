@@ -1,0 +1,1528 @@
+{
+  "schema": 1,
+  "sample_rate": 48000,
+  "channels": 1,
+  "source": "libopus synthetic oracle",
+  "libopus": "libopus 1.5.2",
+  "bitrate": 16000,
+  "hard_cbr": true,
+  "records": [
+    {
+      "index": 0,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": -1,
+      "missing": false,
+      "packet_hex": "4b0183ca907f911ce65fa6fee6b4cc0bb31961625ab2d29314498973249c9b0d5021384cf596cdc8",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 239709273,
+      "pcm_offset": 0,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 0,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ],
+      "transition_label": "config-1-to-9"
+    },
+    {
+      "index": 1,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01afb3dd7cf0e886da8b07a593696a4bc6f04560da44a3a45d35f5843759dce5ccfa5c8a23d540",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 50177496,
+      "pcm_offset": 960,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01ad37fa01a32a5fde5eb0b10a695b61d8d63bb38086a023fcd4276438e5a05402317b2ccb7fb0",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 363139296,
+      "pcm_offset": 1920,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4101acfb6636261c7f52c0538df9b448e35c335c8a6721e9d1690cbf672dfe406c7f4b353d9d00",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 2066391040,
+      "pcm_offset": 2880,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01b213a636268f2da19711cd68d70c29b544e78eedbde58d1ae4d629cedcb7af6c58daf734abe0",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 272283232,
+      "pcm_offset": 3840,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4101ad021a10c13c9e9a1e7ed88e289a314a85670168585833caccd6680ab72f2dc12ef3704800",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 12698460,
+      "pcm_offset": 4800,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4102aeae2637eb19e4a79b6cca36f96392a9a5be4e940287212e9d68a5abaa18a17571e96e0000",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 25754872,
+      "pcm_offset": 5760,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4102b060e636268f290214d0aa5f3570d8da3255a3b44e974884f3655103d0cc392b4c56d40000",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 56898920,
+      "pcm_offset": 6720,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01ac7225ec3395560abcfe711f008309e0398c38efc64b3d0da424293a9347321c08578094b9e0",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 517425376,
+      "pcm_offset": 7680,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4101b06df89698155f631d5fde2a2d02495c1368b2f8ac2d3f410c019e8f09150ba6b89be3c000",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 1034407584,
+      "pcm_offset": 8640,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "48ab4a51d80193196e23bcbfa3bfcc2ec02619903e0df4a093f50ceff42b8db81eb6a18d80b23ee0",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 575880091,
+      "pcm_offset": 9600,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "48b06291e2b245ecab496ddd42d30a97dd35fc4663d2c713cd6d208c61d5332db23c9d3dc4ecbbec",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 25230258,
+      "pcm_offset": 10560,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "event": "loss-single",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": true,
+      "packet_hex": "",
+      "frame_size": 960,
+      "result": 960,
+      "final_range": 0,
+      "pcm_offset": 11520,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 13,
+      "event": "recovery",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "48beeb216b7e134757ea5fdb2096ac8979d17b6bce8e516413c2686b5323e2fb8bf0cd07e42515b0",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 87234285,
+      "pcm_offset": 12480,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 14,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4101befc940e2eb088a47cc27b289b8344c3a3f27dca03e45aff84b53f2d734add5deec8b24500",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 578381937,
+      "pcm_offset": 13440,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 15,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01bf1d258bbe9d242d522ff142c2ada35c6b9524ebffc05f57118047ae7351e46c907a5ccfe750",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 163127976,
+      "pcm_offset": 14400,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 16,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01bf008b771350cb26898a5f0e54bc955a1fc1f83742ee6c66b44eebec3155ade436661b2adb4c",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 85249055,
+      "pcm_offset": 15360,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 17,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01bf2d579065acdf004a0a3b740e5622ca48be2b0e4f42239654c67320bfe0070ade10c9a2c1f4",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 33137181,
+      "pcm_offset": 16320,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 18,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01bee2a10b18a1622fbe793b8aa8823da219044d1dcf896d7a20a513bc79125ca93cc5bba7aabe",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 17693049,
+      "pcm_offset": 17280,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 19,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "48beff388bc0e95ec222ccf564cb4e8208787377fd3bd8d8ef3d618f72e3d3e62545a2a9af6f8e30",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 304405760,
+      "pcm_offset": 18240,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 20,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01b6f200cdbe3c29f660878fd8603dca9d1dd9b87de54b6f934d715a03a8acafe9a9afa5bb6d84",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 15755168,
+      "pcm_offset": 19200,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 21,
+      "event": "loss-run",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": true,
+      "packet_hex": "",
+      "frame_size": 960,
+      "result": 960,
+      "final_range": 0,
+      "pcm_offset": 20160,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 22,
+      "event": "loss-run",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": true,
+      "packet_hex": "",
+      "frame_size": 960,
+      "result": 960,
+      "final_range": 0,
+      "pcm_offset": 21120,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 23,
+      "event": "loss-run",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": true,
+      "packet_hex": "",
+      "frame_size": 960,
+      "result": 960,
+      "final_range": 0,
+      "pcm_offset": 22080,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 24,
+      "event": "loss-run",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": true,
+      "packet_hex": "",
+      "frame_size": 960,
+      "result": 960,
+      "final_range": 0,
+      "pcm_offset": 23040,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 25,
+      "event": "recovery",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "48bee248a30083e4a246fe3d12b4f94ee7826f258390aea647584f392a9081e258f8727708ee5a80",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 10937712,
+      "pcm_offset": 24000,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 26,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "48beffa8a30083d26d0e0fae5d06285dbbf5c79cc3ee8da2f4571b56147d4f5b90b4732680da1658",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 154349144,
+      "pcm_offset": 24960,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 27,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01bee32b771350cb27cea3a6f8962863429d86055084c7358b8b86827815e7302441086f31d498",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 121952430,
+      "pcm_offset": 25920,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 28,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4105bedf2d44e50336e4d8d560f7313146b20b1935056122eae5d238a5c11bc458800000000000",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 8881265,
+      "pcm_offset": 26880,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 29,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4103bec5cabe10543708d41fa9053b7ce7f1da780f9a1c628fd6d5f2511c131b498daafe000000",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 15999858,
+      "pcm_offset": 27840,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 30,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01bf1d25887b6b9d1c35465d32df7f1e8c136cd65ffd258a869d76745fb36790a39c74b3bf58a0",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 229394833,
+      "pcm_offset": 28800,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 31,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "48bf13b49644b73bcb83c0cc5000ed37087243b7b99dc22559773533d939bbc5fff10072e32dd1a0",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 645103360,
+      "pcm_offset": 29760,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 32,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4101bec4e8a30083d2c584fce4f98f929425c95a6beaa9237e8651d2a06d5aaa281d427a079600",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 20160772,
+      "pcm_offset": 30720,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 33,
+      "event": "toc-only",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "48",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 0,
+      "pcm_offset": 31680,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 34,
+      "event": "toc-only",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "48",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 0,
+      "pcm_offset": 32640,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 35,
+      "event": "toc-only",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "48",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 0,
+      "pcm_offset": 33600,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 36,
+      "event": "recovery",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b01bf1d08a2e941eacaa3b0e90dab9495e98561aaa9af7c7c38d623b8cb778d04eab190bdb17a20",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 271180542,
+      "pcm_offset": 34560,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 37,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "48bec5058866d92cf57a1437710a2141d124ef2fa3f17d1023ea2e0025f0d1843703d368f04c8652",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 24812744,
+      "pcm_offset": 35520,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 38,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4100bec5cabe1051af3609de08c2bd2972a660ef53f7c7f53af59c2534772ccc5be62f304a7dcd",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 1764333312,
+      "pcm_offset": 36480,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 39,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4103bec4e8a30083d2c57f246a5a59ea4244d333256668404b0e2b034168ace3afa33988000000",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 60820720,
+      "pcm_offset": 37440,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 40,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4100ab4db39dd7faeb5fa407d421bab0de3eab8aaeb6e2d3d5bbcd3fbb2bddc73cc60bc7af30e0",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 476509696,
+      "pcm_offset": 38400,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 41,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "483d7709207ac90a7c40875c530e295fd68f6bc36c8e1b6a97f4c2b5557f02e34569b3caa160aec0",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 337234977,
+      "pcm_offset": 39360,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 42,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b41053e22528e8d3f5e6b8b640f4a6f3ff73a47f8b8c939d5bc36bfa28548f0441fc00000000000",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 98531051,
+      "pcm_offset": 40320,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 43,
+      "event": "zero-size-code1",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "49",
+      "frame_size": 5760,
+      "result": 1920,
+      "final_range": 0,
+      "pcm_offset": 41280,
+      "samples": 1920,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        },
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 44,
+      "event": "recovery",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b41003f251290fe4f7273dcfbaf9cede76cd8fea11c9c9853efbc853842817cb817ab04a5706dc0",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 1417859448,
+      "pcm_offset": 43200,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 45,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4100bee265887b6b98aa0aad2045cc7f308dd60c5392e42d508dd05641bcbdbf0ec892464a0358",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 99477680,
+      "pcm_offset": 44160,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 46,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b41013e225290fe5064e460135338fce5f73daf6946f13bb0740b60160b1e659d71a87266fe2000",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 824595272,
+      "pcm_offset": 45120,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 47,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "483d7709207ac907e513ccab8f1ae6267038bbc89c062b5d6d11dfb26f95ba3d3454bea66e6d5338",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 148237733,
+      "pcm_offset": 46080,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 48,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b41023f56d18c8acc551981f5ed3a0a42517ab1fbaef7cb11339cff44571e14e81cd8e9abc00000",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 483425052,
+      "pcm_offset": 47040,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 49,
+      "event": "zero-size-code3",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b03",
+      "frame_size": 5760,
+      "result": 2880,
+      "final_range": 0,
+      "pcm_offset": 48000,
+      "samples": 2880,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        },
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        },
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 50,
+      "event": "recovery",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b41003e25a7eb17458d9e544c2da576ea393be627d8336b68e20afaf0c26d0d05b3178f4c4f0770",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 431000182,
+      "pcm_offset": 50880,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 51,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b013e79c901208132a82d076d95930062e86d4372cd4c4a67a2ff06434b9ba776636f5a380ebc20",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 411522343,
+      "pcm_offset": 51840,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 52,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b4100066e242fa9236aae12bf2bfe8ac9006b535ad13e54c5868ec4484513256de28870feba7ca0",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 295744265,
+      "pcm_offset": 52800,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 53,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b41013f25b87d09ea54085b0520a10bee88014faead8b27300a4dd4fbabcc31427c8136af7cc000",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 1726075128,
+      "pcm_offset": 53760,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 54,
+      "event": "malformed-code3",
+      "requested_mode": 1000,
+      "config": -1,
+      "mode": "invalid",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "0300",
+      "frame_size": 5760,
+      "result": -4,
+      "final_range": 1726075128,
+      "pcm_offset": 54720,
+      "samples": 0,
+      "reference_decode_frames": []
+    },
+    {
+      "index": 55,
+      "event": "recovery",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b41003f5e018c8acc4e1ad9e22604263ceeed0fd628bbebd1d7499a19d6585602fdb655b8db747e",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 38488590,
+      "pcm_offset": 54720,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 56,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b013f2649011e2ef14339723e640bb7c55b5cdf38a325d977492e6a2f20b46c84d51ba30ae6c050",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 464627328,
+      "pcm_offset": 55680,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 57,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b41023f5e018c8acc4e0ad582fefde7436139eea4982eef56f6a0484fafc33373bdf90516800000",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 13342510,
+      "pcm_offset": 56640,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 58,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b41003f26490120813573aaaa3e8e9981d90f6a5fabac11470b3d1b3e4f7421bc2aeac584e66d80",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 15505431,
+      "pcm_offset": 57600,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "index": 59,
+      "event": "audio",
+      "requested_mode": 1000,
+      "config": 9,
+      "mode": "silk",
+      "previous_config": 9,
+      "missing": false,
+      "packet_hex": "4b41003f56d18c8abe9c5b9f045ae40261f31e516441c49341c53cfabbe03183f16a7cee1047f4d5",
+      "frame_size": 5760,
+      "result": 960,
+      "final_range": 16914650,
+      "pcm_offset": 58560,
+      "samples": 960,
+      "reference_decode_frames": [
+        {
+          "mode": 1000,
+          "prev_mode": 1000,
+          "redundancy": 0,
+          "direction": 0,
+          "prev_redundancy": 0,
+          "bytes": 0
+        }
+      ]
+    }
+  ],
+  "samples": 59520
+}
