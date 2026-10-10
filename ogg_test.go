@@ -3,6 +3,8 @@ package puropus
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
+	"io"
 	"math"
 	"slices"
 	"testing"
@@ -565,5 +567,52 @@ func assertSamePackets(t *testing.T, name string, got, want []Packet) {
 		if !bytes.Equal(g.Data, w.Data) || g.Start != w.Start || g.Duration != w.Duration || g.Skip != w.Skip || g.Trim != w.Trim {
 			t.Fatalf("%s: packet %d is %+v, want %+v", name, i, g, w)
 		}
+	}
+}
+
+// A chained link whose OpusTags page is lost goes on to its audio: its
+// header still applies, and the file decodes exactly as if the page were
+// there, as with ffmpeg n9.0.2 (ffmpeg 6.1.1 stops at the link). A chained
+// link that ends after its OpusHead is truncated, and without the first
+// link's OpusTags the input is not taken for Ogg Opus, as with ffmpeg.
+func TestDecodeChainedOggWithLostTagsPage(t *testing.T) {
+	a := readFixture(t, "ogg-celt-fb.opus")
+	b := readFixture(t, "ogg-silk-wb.opus")
+	pagesB := oggPages(t, b)
+	want, _ := decodeAll(t, bytes.NewReader(slices.Concat(a, b)), DecodeOptions{})
+	wantSrc, err := ReadPackets(bytes.NewReader(slices.Concat(a, b)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags := pagesB[1]
+	corrupt := bytes.Clone(b)
+	corrupt[tags.start+tags.size-1] ^= 0x01
+	missing := slices.Concat(b[:tags.start], b[tags.start+tags.size:])
+	for name, link := range map[string][]byte{"corrupt": corrupt, "missing": missing} {
+		data := slices.Concat(a, link)
+		assertSamePCM(t, name, data, want)
+		src, err := ReadPackets(bytes.NewReader(data))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		assertSamePackets(t, name, src.Packets, wantSrc.Packets)
+	}
+
+	headOnly := slices.Concat(a, b[:tags.start])
+	dec, err := NewDecoder(bytes.NewReader(headOnly), DecodeOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pcm, err := readAll(dec, make([]float32, 4096)); !errors.Is(err, ErrTruncated) || errors.Is(err, io.EOF) || len(pcm) != 144000 {
+		t.Fatalf("chained link ending after its OpusHead: %d samples, %v", len(pcm), err)
+	}
+	if _, err := ReadPackets(bytes.NewReader(headOnly)); !errors.Is(err, ErrTruncated) {
+		t.Fatalf("ReadPackets of a link ending after its OpusHead: %v", err)
+	}
+
+	first := bytes.Clone(a)
+	first[oggPages(t, a)[1].start+40] ^= 0x01
+	if _, err := NewDecoder(bytes.NewReader(first), DecodeOptions{}); err == nil {
+		t.Fatal("first link without OpusTags accepted")
 	}
 }

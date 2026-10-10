@@ -451,6 +451,7 @@ type oggSource struct {
 	pendingLink    bool
 	pendingPreSkip int
 	pendingGain    int16
+	needTags       bool // a chained link's OpusTags is the next packet
 	// pageDuration counts the samples of the packets since the last page
 	// with a granule position; previousGranule is that position.
 	pageDuration    int64
@@ -488,6 +489,9 @@ func (s *oggSource) next() ([]byte, packetMeta, error) {
 	for {
 		p, err := s.r.Next()
 		if err != nil {
+			if s.needTags && errors.Is(err, io.EOF) {
+				err = io.ErrUnexpectedEOF // the input ended inside a chained link's headers
+			}
 			return nil, packetMeta{}, err
 		}
 		if p.BOS && len(p.Data) >= 8 && string(p.Data[:8]) == "OpusHead" {
@@ -498,20 +502,19 @@ func (s *oggSource) next() ([]byte, packetMeta, error) {
 			if head.Channels != s.channels {
 				return nil, packetMeta{}, unsupported("channel-count change between Ogg links (%d to %d)", s.channels, head.Channels)
 			}
-			tags, err := s.r.Next()
-			if err != nil {
-				return nil, packetMeta{}, wrapContainer(err)
-			}
-			if !opus.IsTags(tags.Data) {
-				return nil, packetMeta{}, fmt.Errorf("puropus: second packet of chained Ogg link is not OpusTags")
-			}
 			s.pendingLink = true
 			s.pendingPreSkip = head.PreSkip
 			s.pendingGain = head.OutputGain
+			s.needTags = true
 			s.pageDuration = 0
 			s.haveGranule = false
 			continue
 		}
+		// A chained link whose OpusTags page was lost (dropped as corrupt)
+		// goes on to its audio, which is decoded, as ffmpeg n9.0.2 decodes
+		// it. openOgg still requires the first link's OpusTags, as ffmpeg
+		// does: without it the input may not be Ogg Opus.
+		s.needTags = false
 		if opus.IsTags(p.Data) {
 			continue
 		}
