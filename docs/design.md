@@ -269,7 +269,12 @@ packet brings along any packets before it that lie inside the pre-skip, so the
 decoder warm-up they carry is kept too. Exact guards are the stretches between
 the interval boundary and the first or last copied packet, at least
 `Edit.Guard` (80 ms by default) and rounded to the nearest 2.5 ms so the
-encoder receives whole Opus frames; the `Encoder` contract makes the
+encoder receives whole Opus frames, which puts each edge of the output within
+1.25 ms of the interval's. At an end of the source the rounded stretch can
+reach up to 1.25 ms past the audio: the encoder gets silence there, and the
+output discards it as the pre-skip of its first packet or the end trimming
+of its last, so the promise holds at the source's ends too
+(`TestCutExactKeepsItsToleranceAtTheSourceEnds`); the `Encoder` contract makes the
 implementation responsible for its own algorithmic delay, since only it knows
 the delay and its frame sizes.
 

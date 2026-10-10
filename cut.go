@@ -451,7 +451,9 @@ func (b *builder) selectPackets(reg region, inward bool) []Packet {
 
 // exactRegion copies the packets that lie inside the region by at least the
 // guard on each side and re-encodes the audio between them and the region
-// boundaries; a region with no such packet is re-encoded whole.
+// boundaries; a region with no such packet is re-encoded whole. Each
+// re-encoded stretch is rounded to the nearest 2.5 ms, so the output's edges
+// land within 1.25 ms of the region's.
 func (b *builder) exactRegion(reg region) ([]Packet, error) {
 	guard := durationToSamples(cmp.Or(b.edit.Guard, defaultGuard))
 	packets := b.src.Packets
@@ -466,14 +468,14 @@ func (b *builder) exactRegion(reg region) ([]Packet, error) {
 	after := i
 	b.hint = max(b.hint, after)
 	if first == after {
-		return b.encode(reg.start, reg.start+gridLength(reg.end-reg.start, b.window.end-reg.start))
+		return b.encode(reg.start, reg.start+gridLength(reg.end-reg.start))
 	}
 	copyStart, copyEnd := packets[first].Start, packets[after-1].End()
-	lead, err := b.encode(copyStart-gridLength(copyStart-reg.start, copyStart-b.window.start), copyStart)
+	lead, err := b.encode(copyStart-gridLength(copyStart-reg.start), copyStart)
 	if err != nil {
 		return nil, err
 	}
-	tail, err := b.encode(copyEnd, copyEnd+gridLength(reg.end-copyEnd, b.window.end-copyEnd))
+	tail, err := b.encode(copyEnd, copyEnd+gridLength(reg.end-copyEnd))
 	if err != nil {
 		return nil, err
 	}
@@ -483,21 +485,30 @@ func (b *builder) exactRegion(reg region) ([]Packet, error) {
 // defaultGuard is the Guard of an Edit that leaves it zero.
 const defaultGuard = 80 * time.Millisecond
 
-// gridLength rounds a guard length to the nearest 2.5 ms, never exceeding
-// the audio available.
-func gridLength(want, available int64) int64 {
+// gridLength rounds a guard length to the nearest 2.5 ms, the unit of
+// Opus frames.
+func gridLength(want int64) int64 {
 	const grid = 120 // 2.5 ms at 48 kHz
-	return min((want+grid/2)/grid, available/grid) * grid
+	return (want + grid/2) / grid * grid
 }
 
 // encode re-encodes the source audio in [start, end) and returns the packets
-// positioned there.
+// positioned there. Rounding to the frame grid can take the stretch up to
+// 1.25 ms past an end of the source: the encoder gets silence for that part,
+// which its packets then discard, as the pre-skip of the first or the end
+// trimming of the last.
 func (b *builder) encode(start, end int64) ([]Packet, error) {
 	if end <= start {
 		return nil, nil
 	}
 	ch := int64(b.channels)
-	pcm := b.src.Native[(start-b.window.start)*ch : (end-b.window.start)*ch]
+	from, to := max(start, b.window.start), min(end, b.window.end)
+	pcm := b.src.Native[(from-b.window.start)*ch : (to-b.window.start)*ch]
+	if from != start || to != end {
+		padded := make([]float32, (end-start)*ch)
+		copy(padded[(from-start)*ch:], pcm)
+		pcm = padded
+	}
 	encoded, err := b.edit.Encoder.Encode(pcm, b.channels)
 	if err != nil {
 		return nil, fmt.Errorf("puropus: encoder: %w", err)
@@ -509,8 +520,14 @@ func (b *builder) encode(start, end int64) ([]Packet, error) {
 		if err != nil {
 			return nil, fmt.Errorf("puropus: encoder produced an invalid packet: %w", err)
 		}
-		packets = append(packets, Packet{Data: data, Start: pos, Duration: parsed.Duration48(), Link: b.linkAt(pos)})
-		pos += int64(parsed.Duration48())
+		coded := int64(parsed.Duration48())
+		skip := min(max(from-pos, 0), coded)
+		trim := min(max(pos+coded-to, 0), coded-skip)
+		packets = append(packets, Packet{
+			Data: data, Start: pos + skip, Duration: int(coded - skip - trim), Skip: int(skip), Trim: int(trim),
+			Link: b.linkAt(max(pos, from)),
+		})
+		pos += coded
 	}
 	if pos != end {
 		return nil, fmt.Errorf("puropus: encoder returned %d samples for a %d-sample region", pos-start, end-start)

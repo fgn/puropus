@@ -708,3 +708,58 @@ func TestCutRejectsMeaninglessEdits(t *testing.T) {
 		t.Fatalf("exact [100, 200) ms: %v, %v", exact.Duration(), err)
 	}
 }
+
+// SnapExact rounds each re-encoded stretch to the nearest 2.5 ms, so an edge
+// of its output lands within 1.25 ms of the interval's, even at an end of
+// the source, where too little audio is left for the rounded length: the
+// encoder gets silence past the end, which the output then discards as
+// pre-skip or end trimming. Before, the length was rounded down there, and a
+// whole exact cut of a 959-sample source returned 840 samples, 2.48 ms short.
+func TestCutExactKeepsItsToleranceAtTheSourceEnds(t *testing.T) {
+	silence, err := opus.Silence(1, opus.BandwidthFullband, 20*ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tiny := Source{Header: Header{Channels: 1}, Packets: []Packet{{Data: silence[0], Duration: 959, Trim: 1}}, Native: make([]float32, 959)}
+	out, err := Cut(tiny, Edit{Keep: []Interval{{0, tiny.Duration()}}, Snap: SnapExact, Encoder: silenceEncoder{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Duration() != tiny.Duration() {
+		t.Fatalf("a whole exact cut of %v returned %v", tiny.Duration(), out.Duration())
+	}
+
+	data := readFixture(t, "ogg-celt-fb.opus") // pre-skip 312, end trimming 648
+	_, dec := decodeAll(t, bytes.NewReader(data), DecodeOptions{KeepNative: true})
+	src := dec.Source()
+	end := durationToSamples(src.Duration())
+	const tolerance = 60 // 1.25 ms
+	for k := int64(0); k < 400; k += 23 {
+		for _, reg := range []region{{k, 48000}, {50000, end - k}, {k, end - k}, {k, k + 2000}, {end - 2000 - k, end - k}} {
+			out, err := Cut(src, Edit{Keep: []Interval{{samplesToDuration(reg.start), samplesToDuration(reg.end)}}, Snap: SnapExact, Encoder: silenceEncoder{}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			first, last := out.Spans[0], out.Spans[len(out.Spans)-1]
+			from, to := durationToSamples(first.In), durationToSamples(last.In+last.Length)
+			if first.Synthetic || last.Synthetic || abs(from-reg.start) > tolerance || abs(to-reg.end) > tolerance {
+				t.Fatalf("[%d, %d): the output covers [%d, %d), spans %+v", reg.start, reg.end, from, to, out.Spans)
+			}
+			if d := durationToSamples(out.Duration()) - (reg.end - reg.start); abs(d) > 2*tolerance {
+				t.Fatalf("[%d, %d): %v of output", reg.start, reg.end, out.Duration())
+			}
+			for _, format := range []Format{FormatOgg, FormatWebM} {
+				if pcm := decodeStream(t, out, format); int64(len(pcm)) != durationToSamples(out.Duration()) {
+					t.Fatalf("[%d, %d), %v: %d samples for %v", reg.start, reg.end, format, len(pcm), out.Duration())
+				}
+			}
+		}
+	}
+}
+
+func abs(n int64) int64 {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
