@@ -838,6 +838,10 @@ func openWebM(br *bufio.Reader) (packetSource, Header, error) {
 	track := r.Track()
 	channels := track.Channels
 	var gain int16
+	if track.CodecDelay > samplesToDuration(opus.MaxPreSkip) {
+		// CodecDelay mirrors the OpusHead pre-skip, which cannot be longer.
+		return nil, Header{}, unsupported("WebM CodecDelay of %v, beyond the %d samples of an OpusHead pre-skip", track.CodecDelay, opus.MaxPreSkip)
+	}
 	preSkip := int(durationToSamples(track.CodecDelay))
 	if len(track.CodecPrivate) >= 19 {
 		head, err := opus.ParseHead(track.CodecPrivate)
@@ -854,11 +858,25 @@ func openWebM(br *bufio.Reader) (packetSource, Header, error) {
 		PreSkip:    preSkip,
 		OutputGain: gain,
 	}
-	tick := (int64(r.Info().TimecodeScale)*SampleRate + int64(time.Second) - 1) / int64(time.Second)
+	scale := int64(min(r.Info().TimecodeScale, uint64(time.Hour))) // larger ticks hide every gap anyway
+	tick := (scale*SampleRate + int64(time.Second) - 1) / int64(time.Second)
 	return &webmSource{r: r, tick: tick}, header, nil
 }
 
 func (s *webmSource) reuseData() { s.r.ReuseBlockData() }
+
+// blockSamples returns how many of a block's coded samples a DiscardPadding
+// of either sign covers: its magnitude in samples, at most coded. Bounding it
+// before negating and narrowing keeps the most negative padding, whose
+// negation overflows, and paddings beyond an int on 32-bit platforms
+// discarding the whole block.
+func blockSamples(padding time.Duration, coded int64) int {
+	whole := samplesToDuration(coded)
+	if padding >= whole || padding <= -whole {
+		return int(coded)
+	}
+	return int(durationToSamples(max(padding, -padding)))
+}
 
 // webmGap returns the audio missing before a block of next samples that
 // starts late samples after the block before it ends, its timestamps having
@@ -881,18 +899,18 @@ func (s *webmSource) next() ([]byte, packetMeta, error) {
 	if err != nil {
 		return nil, packetMeta{}, err
 	}
-	// DiscardPadding drops audio from the end of the block when positive and
-	// from its start when negative (Matroska).
-	meta := packetMeta{}
-	switch {
-	case b.DiscardPadding > 0:
-		meta.trimEnd = int(durationToSamples(b.DiscardPadding))
-	case b.DiscardPadding < 0:
-		meta.trimStart = int(durationToSamples(-b.DiscardPadding))
-	}
 	coded := int64(0)
 	if parsed, err := opus.Parse(b.Data, false); err == nil {
 		coded = int64(parsed.Duration48())
+	}
+	// DiscardPadding drops audio from the end of the block when positive and
+	// from its start when negative (Matroska), at most the whole block.
+	meta := packetMeta{}
+	switch {
+	case b.DiscardPadding > 0:
+		meta.trimEnd = blockSamples(b.DiscardPadding, coded)
+	case b.DiscardPadding < 0:
+		meta.trimStart = blockSamples(b.DiscardPadding, coded)
 	}
 	at := durationToSamples(b.Timestamp)
 	if s.started {

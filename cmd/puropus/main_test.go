@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -291,5 +292,16 @@ func TestOutputIsReplacedOnlyOnSuccess(t *testing.T) {
 	}
 	if info, err := os.Stat(output); err != nil || info.Mode().Perm() != 0o640 {
 		t.Fatalf("output mode %v, want 0640 kept (%v)", info.Mode().Perm(), err)
+	}
+}
+
+// Interval seconds beyond the range of time.Duration saturate, where the
+// float conversion would be undefined.
+func TestSecondsSaturate(t *testing.T) {
+	t.Parallel()
+	for v, want := range map[float64]time.Duration{1.5: 1500 * time.Millisecond, 1e300: math.MaxInt64, -1e300: math.MinInt64} {
+		if got := seconds(v); got != want {
+			t.Errorf("seconds(%g) = %d, want %d", v, got, want)
+		}
 	}
 }

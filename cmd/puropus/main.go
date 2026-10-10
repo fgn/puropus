@@ -391,8 +391,17 @@ func readIntervals(path string) ([]puropus.Interval, error) {
 	return out, nil
 }
 
+// seconds converts seconds to a duration, saturating at the range of
+// time.Duration, where converting the float would be undefined.
 func seconds(v float64) time.Duration {
-	return time.Duration(math.Round(v * float64(time.Second)))
+	ns := math.Round(v * float64(time.Second))
+	switch {
+	case ns >= math.MaxInt64:
+		return math.MaxInt64
+	case ns <= math.MinInt64:
+		return math.MinInt64
+	}
+	return time.Duration(ns)
 }
 
 func formatBitrate(bytes int, duration time.Duration) string {

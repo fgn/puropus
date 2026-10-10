@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"math"
 	"slices"
 	"testing"
+	"time"
 )
 
 // The tests in this file cover malformed and unusual input. Several guard
@@ -186,6 +188,26 @@ func TestInvalidBytesInsideAKnownSizeCluster(t *testing.T) {
 		_, blocks, err := readAll(t, tc.file)
 		if len(blocks) != 1 || !errors.Is(err, tc.wantErr) || (tc.wantErr == nil) != (err == nil) {
 			t.Fatalf("%s: %d blocks, error %v, want 1 block and %v", tc.name, len(blocks), err, tc.wantErr)
+		}
+	}
+}
+
+// A block's time saturates where a corrupt or hostile Cluster timestamp or
+// TimecodeScale would overflow a time.Duration.
+func TestBlockTimestampsSaturate(t *testing.T) {
+	for _, tc := range []struct {
+		cluster, relative int64
+		scale             uint64
+		want              time.Duration
+	}{
+		{1000, -10, 1000000, 990 * time.Millisecond},
+		{math.MaxInt64, 10, 1, math.MaxInt64},
+		{math.MaxInt64 / 2, 0, 1000000, math.MaxInt64},
+		{0, -1, math.MaxUint64, -math.MaxInt64},
+		{0, -2, math.MaxInt64, math.MinInt64},
+	} {
+		if got := ticksToDuration(tc.cluster, tc.relative, tc.scale); got != tc.want {
+			t.Errorf("ticksToDuration(%d, %d, %d) = %d, want %d", tc.cluster, tc.relative, tc.scale, got, tc.want)
 		}
 	}
 }

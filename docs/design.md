@@ -121,9 +121,12 @@ invalid: puropus then returns no audio, ffmpeg the first packet after its
 pre-skip.
 
 WebM pre-skip comes from the `OpusHead` in `CodecPrivate`, with `CodecDelay`
-as a fallback when there is no `OpusHead`. A block's `DiscardPadding` drops
+as a fallback when there is no `OpusHead`; a `CodecDelay` longer than an
+`OpusHead` pre-skip can be (65 535 samples) is `ErrUnsupported`, and block
+times saturate where a corrupt timestamp or scale would overflow. A block's `DiscardPadding` drops
 audio from its end when positive and from its start when negative
-(Matroska), on any block; the start's samples are the packet's `Skip`. On
+(Matroska), on any block, at most the whole block whatever the value; the
+start's samples are the packet's `Skip`. On
 the first block they come before the pre-skip, which still applies: the
 Matroska specification defines the two as separate discards and does not
 combine them. ffmpeg does not agree with itself there (6.1.1 drops 480

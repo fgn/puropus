@@ -3,8 +3,10 @@ package puropus
 import (
 	"bytes"
 	"errors"
+	"math"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/fgn/puropus/internal/webm"
 	"github.com/fgn/puropus/opus"
@@ -193,5 +195,68 @@ func TestDecodeReportsATruncatedKnownSizeCluster(t *testing.T) {
 	}
 	if pcm, err := readAll(dec, make([]float32, 4096)); !errors.Is(err, ErrTruncated) || len(pcm) != 960 {
 		t.Fatalf("%d samples, error %v, want 960 and ErrTruncated", len(pcm), err)
+	}
+}
+
+// withDiscardPadding rewrites the 4-byte DiscardPadding that webmFile wrote
+// for -480 samples as an 8-byte one holding ns, growing the BlockGroup and
+// the Cluster around it.
+func withDiscardPadding(t *testing.T, data []byte, ns int64) []byte {
+	t.Helper()
+	old := []byte{0x75, 0xa2, 0x84, 0xff, 0x67, 0x69, 0x80} // -10 000 000 ns
+	at := bytes.Index(data, old)
+	cluster := bytes.Index(data, []byte{0x1f, 0x43, 0xb6, 0x75})
+	group := bytes.LastIndexByte(data[:at], 0xa0)
+	if at < 0 || cluster < 0 || group < cluster || data[cluster+4]&0x80 == 0 || data[group+1]&0x80 == 0 {
+		t.Fatal("unexpected layout")
+	}
+	out := bytes.Clone(data[:at])
+	out[cluster+4] += 4
+	out[group+1] += 4
+	out = append(out, 0x75, 0xa2, 0x88)
+	for i := 7; i >= 0; i-- {
+		out = append(out, byte(uint64(ns)>>(8*i)))
+	}
+	return append(out, data[at+len(old):]...)
+}
+
+// A DiscardPadding covers at most its whole block, whatever its value: the
+// most negative one, whose negation overflows, used to discard nothing, and
+// paddings beyond an int would wrap on 32-bit platforms. A CodecDelay longer
+// than an OpusHead pre-skip can be, which a file without OpusHead would take
+// as its pre-skip, is unsupported.
+func TestDiscardPaddingCoversAtMostTheBlock(t *testing.T) {
+	silence, err := opus.Silence(1, opus.BandwidthFullband, 20*ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := webmFile(t, 1, 0, [][]byte{silence[0]}, map[int]int{0: -480})
+	if pcm, _ := decodeAll(t, bytes.NewReader(base), DecodeOptions{}); len(pcm) != 480 {
+		t.Fatalf("-10 ms of padding: %d samples, want 480", len(pcm))
+	}
+	for _, ns := range []int64{math.MinInt64, -20 * 1000 * 1000, -int64(time.Hour), math.MaxInt64, int64(time.Hour)} {
+		data := withDiscardPadding(t, base, ns)
+		pcm, dec := decodeAll(t, bytes.NewReader(data), DecodeOptions{KeepPackets: true})
+		if len(pcm) != 0 {
+			t.Fatalf("padding of %d ns: %d samples, want none", ns, len(pcm))
+		}
+		if p := dec.Source().Packets[0]; p.Coded() != 960 || p.Duration != 0 {
+			t.Fatalf("padding of %d ns: packet %+v", ns, p)
+		}
+	}
+
+	var buf bytes.Buffer
+	w, err := webm.NewWriter(&buf, webm.WriterOptions{Channels: 1, CodecPrivate: []byte{}, CodecDelay: 2 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteBlock(silence[0], 960, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewDecoder(bytes.NewReader(buf.Bytes()), DecodeOptions{}); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("a CodecDelay of 2 s without OpusHead: %v", err)
 	}
 }

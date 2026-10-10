@@ -300,7 +300,7 @@ func (r *Reader) Next() (Block, error) {
 			if err != nil {
 				return Block{}, err
 			}
-			r.clusterTicks = int64(readUint(payload))
+			r.clusterTicks = int64(min(readUint(payload), math.MaxInt64))
 		case idSimpleBlock:
 			trackNumber, err := r.peekBlockTrack(size)
 			if err != nil {
@@ -413,12 +413,35 @@ func (r *Reader) parseBlock(payload []byte, discardNS int64) (Block, bool, error
 	if flags&0x06 != 0 { // the lacing bits
 		return Block{}, false, ErrLacing
 	}
-	ticks := r.clusterTicks + relative
 	return Block{
 		Data:           payload[n+3:],
-		Timestamp:      time.Duration(ticks * int64(r.info.TimecodeScale)),
+		Timestamp:      ticksToDuration(r.clusterTicks, relative, r.info.TimecodeScale),
 		DiscardPadding: time.Duration(discardNS),
 	}, true, nil
+}
+
+// ticksToDuration returns the time of a block relative ticks after its
+// Cluster's timestamp, saturating where a corrupt or hostile timestamp or
+// scale would overflow a time.Duration.
+func ticksToDuration(cluster, relative int64, scale uint64) time.Duration {
+	ticks := cluster + relative // cluster is at most math.MaxInt64, relative an int16
+	if relative > 0 && ticks < cluster {
+		ticks = math.MaxInt64
+	}
+	if scale > math.MaxInt64 {
+		scale = math.MaxInt64
+	}
+	ns, overflow := ticks*int64(scale), false
+	if ticks != 0 && (ns/ticks != int64(scale)) {
+		overflow = true
+	}
+	switch {
+	case overflow && ticks > 0:
+		return math.MaxInt64
+	case overflow:
+		return math.MinInt64
+	}
+	return time.Duration(ns)
 }
 
 func (r *Reader) parseInfo(payload []byte) error {
@@ -464,9 +487,9 @@ func (r *Reader) parseTracks(payload []byte) error {
 			case idCodecPrivate:
 				track.CodecPrivate = append([]byte(nil), body...)
 			case idCodecDelay:
-				track.CodecDelay = time.Duration(readUint(body))
+				track.CodecDelay = time.Duration(min(readUint(body), math.MaxInt64))
 			case idSeekPreRoll:
-				track.SeekPreRoll = time.Duration(readUint(body))
+				track.SeekPreRoll = time.Duration(min(readUint(body), math.MaxInt64))
 			case idAudio:
 				return walk(body, func(id uint64, body []byte) error {
 					switch id {
