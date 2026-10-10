@@ -226,7 +226,8 @@ func (r *Reader) enterCluster(size int64) error {
 
 // Next returns the next block of the Opus track. It returns io.EOF at the
 // end of the stream and io.ErrUnexpectedEOF if the input ends inside an
-// element.
+// element, a known-size Segment included: the input may end between
+// elements only when no enclosing element declared more bytes.
 func (r *Reader) Next() (Block, error) {
 	for {
 		if r.segmentRemaining == 0 {
@@ -236,7 +237,7 @@ func (r *Reader) Next() (Block, error) {
 			id, size, err := r.readElementHeader()
 			if err != nil {
 				if errors.Is(err, io.EOF) || r.trailingInvalidElement(err) {
-					return Block{}, io.EOF
+					return Block{}, r.endOfInput()
 				}
 				return Block{}, unexpected(err)
 			}
@@ -269,7 +270,7 @@ func (r *Reader) Next() (Block, error) {
 			id, err := r.peekID()
 			if err != nil {
 				if errors.Is(err, io.EOF) || r.trailingInvalidElement(err) {
-					return Block{}, io.EOF
+					return Block{}, r.endOfInput()
 				}
 				return Block{}, unexpected(err)
 			}
@@ -282,7 +283,7 @@ func (r *Reader) Next() (Block, error) {
 		id, size, err := r.readElementHeader()
 		if err != nil {
 			if (errors.Is(err, io.EOF) && r.clusterRemaining == unknownSize) || r.trailingInvalidElement(err) {
-				return Block{}, io.EOF
+				return Block{}, r.endOfInput()
 			}
 			return Block{}, unexpected(err)
 		}
@@ -709,6 +710,18 @@ func (r *Reader) validatePayloadSize(size int64) error {
 		return fmt.Errorf("element size %d exceeds parent remainder %d", size, remaining)
 	}
 	return nil
+}
+
+// endOfInput returns the error for input that ends between elements outside
+// any known-size Cluster: io.EOF in an unknown-size Segment, which ends where
+// the input does, and io.ErrUnexpectedEOF in a known-size Segment, which
+// declared bytes that never came (a Segment with none left ends with io.EOF
+// before reading on).
+func (r *Reader) endOfInput() error {
+	if r.segmentRemaining == unknownSize {
+		return io.EOF
+	}
+	return io.ErrUnexpectedEOF
 }
 
 // trailingInvalidElement reports whether err is an invalid element header

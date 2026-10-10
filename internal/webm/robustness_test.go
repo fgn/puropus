@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"slices"
 	"testing"
 )
 
@@ -119,5 +120,40 @@ func TestTrailingBytesAfterTheLastClusterAreEndOfStream(t *testing.T) {
 	file = minimalStream("A_OPUS", cluster)
 	if _, _, err := readAll(t, file[:len(file)-1]); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("truncated block: want ErrUnexpectedEOF, got %v", err)
+	}
+}
+
+// A known-size Segment declares how many bytes it holds, so input that ends
+// before them is truncated even when it ends between elements: after a
+// complete known-size Cluster, or inside an unknown-size one. A live
+// recording, whose Segment and Clusters have unknown sizes, may end after any
+// element, and that is the end of the stream.
+func TestEndInsideAKnownSizeSegmentIsTruncation(t *testing.T) {
+	var cluster []byte
+	cluster = appendUint(cluster, idTimestamp, 0)
+	cluster = append(cluster, simpleBlock(1, []byte{0xAA})...)
+	headers := audioTrackHeaders("A_OPUS")
+	segment := func(body []byte, missing int) []byte {
+		file := minimalEBMLHeader()
+		file = appendID(file, idSegment)
+		file = appendSize(file, uint64(len(body)+missing))
+		return append(file, body...)
+	}
+	complete := slices.Concat(headers, appendElement(nil, idCluster, cluster))
+	unknownCluster := slices.Concat(headers, appendUnknownSizeHeader(nil, idCluster), cluster)
+	for _, tc := range []struct {
+		name    string
+		file    []byte
+		wantErr error
+	}{
+		{"complete", segment(complete, 0), nil},
+		{"after a known-size Cluster", segment(complete, 10), io.ErrUnexpectedEOF},
+		{"inside an unknown-size Cluster", segment(unknownCluster, 10), io.ErrUnexpectedEOF},
+		{"live recording", slices.Concat(minimalStream("A_OPUS"), appendUnknownSizeHeader(nil, idCluster), cluster), nil},
+	} {
+		_, blocks, err := readAll(t, tc.file)
+		if len(blocks) != 1 || !errors.Is(err, tc.wantErr) || (tc.wantErr == nil) != (err == nil) {
+			t.Fatalf("%s: %d blocks, error %v, want 1 block and %v", tc.name, len(blocks), err, tc.wantErr)
+		}
 	}
 }

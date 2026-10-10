@@ -152,9 +152,11 @@ with `decode_fec = 1` for the lost duration, then the next packet with
 Otherwise, also at the end of the input and before an error, which the next
 `Read` reports, the packet is concealed. Only the audio of the lost packet
 waits for the next packet; positions, trimming and retained packets are
-those of the stream. Input that ends inside a page or element yields
+those of the stream. Input that ends inside a page or element, or between
+elements before the end its known-size WebM Segment declares, yields
 everything decodable, the resampler's tail included, and then
-`ErrTruncated`.
+`ErrTruncated`. A live recording's unknown-size Segment ends wherever the
+input does.
 
 The containers' own timestamps are not used to find lost packets: a WebM
 block or an Ogg page that is missing altogether (rather than present and
