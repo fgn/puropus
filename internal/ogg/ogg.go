@@ -43,10 +43,16 @@ type Packet struct {
 
 // Reader reassembles packets from one logical stream at a time in an Ogg
 // bitstream. Pages of grouped streams are skipped, while chained streams are
-// returned in sequence. A page with a bad checksum or version is dropped and
-// the bytes after its capture pattern are scanned again for the next page.
-// RFC 3533 leaves recovery to the reader; this matches the behaviour of
-// FFmpeg's Ogg demuxer.
+// returned in sequence.
+//
+// A page with a bad checksum or version is dropped and the bytes after its
+// capture pattern are scanned again for the next page. A packet spanning
+// pages is dropped only when a page of the selected stream is missing, never
+// for a page of another stream. RFC 3533 leaves recovery to the reader. Like
+// FFmpeg's Ogg demuxer, this one drops corrupt pages and rescans them.
+// Unlike it, it also rescans a page whose corrupt size runs past the end of
+// the input, so the pages that size swallowed are still read, and it never
+// joins the fragments of a packet across a missing page (RFC 7845 §3).
 type Reader struct {
 	br *bufio.Reader
 	// pending holds bytes already read from br that are scanned before br:
@@ -56,7 +62,7 @@ type Reader struct {
 	serial    uint32 // the selected stream, valid when haveSer is set
 	haveSer   bool
 	afterLink bool   // the selected stream ended with an EOS page
-	partial   []byte // a packet that continues on the next page
+	partial   []byte // a packet that continues on the next page; empty unless haveSeq
 	queue     []Packet
 	queued    int // packets of queue that Next has returned
 	selector  func([]byte) bool
@@ -249,9 +255,13 @@ func (r *Reader) readPage() error {
 		return nil
 	}
 
+	// A page of the selected stream is missing (dropped as corrupt, or never
+	// there) when the sequence number skips, or when a packet was left open
+	// and this page does not continue it. The packet's rest was lost; drop
+	// what was assembled. Dropped pages leave the packet alone, so this is
+	// where a loss in the selected stream, and only there, discards it.
 	gap := r.haveSeq && sequence != r.sequence+1
 	if gap || flags&FlagContinued == 0 && len(r.partial) > 0 {
-		// The rest of the partial packet was lost; drop what was assembled.
 		r.partial = r.partial[:0]
 	}
 	// A continued page with no partial packet starts with the end of a packet
@@ -392,11 +402,16 @@ func pageBytes(header, lacing, payload []byte) []byte {
 	return append(page, payload...)
 }
 
-// dropAndRescan drops page and any packet being assembled, and queues the
-// page's bytes after its capture pattern to be scanned for the next page.
+// dropAndRescan drops page and queues its bytes after the capture pattern to
+// be scanned for the next page.
+//
+// A packet being assembled is kept: the dropped page may belong to another
+// stream of a grouped bitstream, and nothing in it, its serial number
+// included, can be trusted. If it was a page of the selected stream, the
+// stream's next page reveals the loss by its sequence number, and readPage
+// drops the packet then.
 func (r *Reader) dropAndRescan(page []byte) {
 	r.dropped++
-	r.partial = r.partial[:0]
 	r.pending = append(page[4:], r.pending...)
 }
 

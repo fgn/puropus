@@ -3,6 +3,8 @@ package puropus
 import (
 	"bytes"
 	"encoding/binary"
+	"math"
+	"slices"
 	"testing"
 
 	"github.com/fgn/puropus/opus"
@@ -58,6 +60,99 @@ func fixOggCRC(data []byte, p oggPage) {
 	page := data[p.start : p.start+p.size]
 	binary.LittleEndian.PutUint32(page[22:], 0)
 	binary.LittleEndian.PutUint32(page[22:], oggCRC(page))
+}
+
+// makeOggPage assembles a page. Its pieces are laced in order, each as a
+// complete packet or the end of one, except that with open set the last
+// piece is the start of a packet continued on the next page, a multiple of
+// 255 bytes long.
+func makeOggPage(t *testing.T, serial, sequence uint32, flags byte, granule int64, open bool, pieces ...[]byte) []byte {
+	t.Helper()
+	var lacing, payload []byte
+	for i, piece := range pieces {
+		lacing = append(lacing, bytes.Repeat([]byte{255}, len(piece)/255)...)
+		if !open || i < len(pieces)-1 {
+			lacing = append(lacing, byte(len(piece)%255))
+		} else if len(piece)%255 != 0 {
+			t.Fatalf("open piece of %d bytes", len(piece))
+		}
+		payload = append(payload, piece...)
+	}
+	if len(lacing) > 255 {
+		t.Fatalf("%d segments", len(lacing))
+	}
+	page := make([]byte, 27, 27+len(lacing)+len(payload))
+	copy(page, "OggS")
+	page[5] = flags
+	binary.LittleEndian.PutUint64(page[6:], uint64(granule))
+	binary.LittleEndian.PutUint32(page[14:], serial)
+	binary.LittleEndian.PutUint32(page[18:], sequence)
+	page[26] = byte(len(lacing))
+	page = append(append(page, lacing...), payload...)
+	binary.LittleEndian.PutUint32(page[22:], oggCRC(page))
+	return page
+}
+
+// padOpusPacket reframes a single-frame (code 0) Opus packet as a code 3
+// packet of size bytes. Decoders ignore the padding (RFC 6716 §3.2.5), so it
+// decodes as before.
+func padOpusPacket(t *testing.T, packet []byte, size int) []byte {
+	t.Helper()
+	if packet[0]&3 != 0 {
+		t.Fatal("not a code 0 packet")
+	}
+	frame := packet[1:]
+	for lengthBytes := 1; ; lengthBytes++ {
+		padding := size - 2 - lengthBytes - len(frame)
+		last := padding - 254*(lengthBytes-1) // each 255 byte adds 254
+		if padding < 0 || last < 0 {
+			t.Fatalf("cannot pad %d bytes to %d", len(packet), size)
+		}
+		if last > 254 {
+			continue
+		}
+		out := []byte{packet[0] | 3, 0x40 | 1} // padding flag, one frame
+		out = append(out, bytes.Repeat([]byte{255}, lengthBytes-1)...)
+		out = append(out, byte(last))
+		out = append(out, frame...)
+		return append(out, make([]byte, padding)...)
+	}
+}
+
+// groupedSpanningOgg rebuilds the grouped Vorbis and Opus fixture so that
+// Opus packet 10, padded to 1000 bytes, spans three pages: the end of the
+// first, all of the second, and the start of the third, with the Vorbis
+// stream's last page between the second and the third. It returns the pages
+// and the indexes of those three.
+func groupedSpanningOgg(t *testing.T) (pages [][]byte, middle, vorbis, completing int) {
+	t.Helper()
+	data := readFixture(t, "ogg-grouped-vorbis-opus.ogg")
+	src, err := ReadPackets(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := oggPages(t, data) // Vorbis, Opus, Vorbis, Opus, Vorbis (last), Opus audio, Opus EOS
+	page := func(i int) []byte { return data[fixture[i].start : fixture[i].start+fixture[i].size] }
+	opusSerial := binary.LittleEndian.Uint32(page(1)[14:])
+	audio := make([][]byte, len(src.Packets))
+	for i, p := range src.Packets {
+		audio[i] = p.Data
+	}
+	if len(audio) != 51 || !bytes.Equal(page(5)[27+len(fixture[5].lacing):][:len(audio[0])], audio[0]) {
+		t.Fatal("unexpected fixture layout")
+	}
+	granule := func(i int) int64 { return int64(binary.LittleEndian.Uint64(page(i)[6:])) }
+	big := padOpusPacket(t, audio[10], 1000)
+	const continued, eos = 0x01, 0x04
+	pages = [][]byte{
+		page(0), page(1), page(2), page(3),
+		makeOggPage(t, opusSerial, 2, 0, 10*960, true, append(audio[:10:10], big[:510])...),
+		makeOggPage(t, opusSerial, 3, continued, -1, true, big[510:765]),
+		page(4),
+		makeOggPage(t, opusSerial, 4, continued, granule(5), false, append([][]byte{big[765:]}, audio[11:50]...)...),
+		makeOggPage(t, opusSerial, 5, eos, granule(6), false, audio[50]),
+	}
+	return pages, 5, 6, 7
 }
 
 // pageSamples returns the 48 kHz duration of the packets completing on page p
@@ -251,5 +346,94 @@ func TestDecodeGroupedOggSelectsTheOpusStream(t *testing.T) {
 	}
 	if len(src.Packets) != 51 {
 		t.Fatalf("%d packets, want 51", len(src.Packets))
+	}
+}
+
+// In a grouped file an Opus packet can span pages with a page of another
+// stream between them. When that page is corrupt it is dropped and the Opus
+// packet is untouched, so the Opus output is exactly that of the intact file,
+// whatever the damage: even a serial number that reads as the Opus stream's
+// cannot be trusted, and only the Opus stream's own page sequence numbers
+// show whether it lost a page. ffmpeg's output does not change either, except
+// when the corrupt page's size runs past the end of the input, as it does
+// here for the segment count: ffmpeg then loses every page that size
+// swallowed.
+func TestGroupedOggCorruptPageOfAnotherStreamKeepsOpusPacket(t *testing.T) {
+	pages, _, vorbis, _ := groupedSpanningOgg(t)
+	want, _ := decodeAll(t, bytes.NewReader(readFixture(t, "ogg-grouped-vorbis-opus.ogg")), DecodeOptions{})
+	// The padded packet spanning pages decodes as the fixture's did.
+	assertSamePCM(t, "intact", bytes.Join(pages, nil), want)
+
+	opusSerial := binary.LittleEndian.Uint32(pages[1][14:])
+	for name, corrupt := range map[string]func([]byte){
+		"payload byte":         func(p []byte) { p[27+int(p[26])+7] ^= 0x01 },
+		"serial reads as ours": func(p []byte) { binary.LittleEndian.PutUint32(p[14:], opusSerial) },
+		"segment count":        func(p []byte) { p[26] ^= 0x40 }, // the page runs past the end of the input
+	} {
+		page := append([]byte(nil), pages[vorbis]...)
+		corrupt(page)
+		data := bytes.Join(slices.Concat(pages[:vorbis], [][]byte{page}, pages[vorbis+1:]), nil)
+		assertSamePCM(t, name, data, want)
+		src, err := ReadPackets(bytes.NewReader(data))
+		if err != nil || len(src.Packets) != 51 {
+			t.Fatalf("%s: %d packets, %v", name, len(src.Packets), err)
+		}
+	}
+}
+
+// A corrupt page of the Opus stream itself costs the packets completed on it
+// and the packet spanning it, whether it lies inside that packet or completes
+// it: the fragments on either side are never joined. The audio before it is
+// untouched and decoding goes on after it. ffmpeg produces as many samples
+// when the page completes the packet. For the page inside it, ffmpeg joins
+// the fragments it has, fails to decode the result and puts a packet's
+// duration of silence in its place.
+func TestGroupedOggCorruptOpusPageDropsSpanningPacket(t *testing.T) {
+	pages, middle, _, completing := groupedSpanningOgg(t)
+	want, _ := decodeAll(t, bytes.NewReader(bytes.Join(pages, nil)), DecodeOptions{})
+	const intact = 10*960 - 312 // the first ten packets, after the pre-skip
+	for _, tc := range []struct {
+		name    string
+		page    int
+		samples int
+		packets int
+	}{
+		{"inside the packet", middle, len(want) - 960, 50},
+		// Packets 10 to 49 are lost. The last packet keeps its encoder
+		// padding, as with ffmpeg: end trimming is anchored to the granule
+		// position of the page before it, now the first audio page's.
+		{"completing the packet", completing, intact + 960, 11},
+	} {
+		data := bytes.Clone(bytes.Join(pages, nil))
+		at := 0
+		for _, p := range pages[:tc.page] {
+			at += len(p)
+		}
+		data[at+len(pages[tc.page])-1] ^= 0x01
+		got, dec := decodeAll(t, bytes.NewReader(data), DecodeOptions{})
+		if len(got) != tc.samples || dec.Position() != samplesToDuration(int64(tc.samples)) {
+			t.Fatalf("%s: %d samples, position %v, want %d", tc.name, len(got), dec.Position(), tc.samples)
+		}
+		if d := maxAbsDiff(got[:intact], want); d != 0 {
+			t.Fatalf("%s: the audio before the lost page differs by %g", tc.name, d)
+		}
+		src, err := ReadPackets(bytes.NewReader(data))
+		if err != nil || len(src.Packets) != tc.packets || durationToSamples(src.Duration()) != int64(tc.samples) {
+			t.Fatalf("%s: %d packets covering %v, %v", tc.name, len(src.Packets), src.Duration(), err)
+		}
+	}
+}
+
+// assertSamePCM decodes data at 48 kHz and requires exactly want.
+func assertSamePCM(t *testing.T, name string, data []byte, want []float32) {
+	t.Helper()
+	got, _ := decodeAll(t, bytes.NewReader(data), DecodeOptions{})
+	if len(got) != len(want) {
+		t.Fatalf("%s: %d samples, want %d", name, len(got), len(want))
+	}
+	for i := range want {
+		if math.Float32bits(got[i]) != math.Float32bits(want[i]) {
+			t.Fatalf("%s: sample %d differs", name, i)
+		}
 	}
 }

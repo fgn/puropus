@@ -2,6 +2,7 @@ package ogg
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -10,7 +11,8 @@ import (
 )
 
 // The tests in this file cover damaged and unusual input. The reader
-// recovers from them the way the ffmpeg command does.
+// recovers from them the way the ffmpeg command does, except where a test
+// says otherwise.
 
 // A page whose checksum or version byte is wrong is dropped and reading
 // continues with the next page, as with ffmpeg, which goes on to decode the
@@ -175,4 +177,171 @@ func TestTrailingJunkAfterAStreamWithoutEOSIsEndOfInput(t *testing.T) {
 	if _, err := readAllPackets(NewReader(bytes.NewReader(data[:len(data)-5]))); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("truncated page: want ErrUnexpectedEOF, got %v", err)
 	}
+}
+
+// pageSpec describes one page for the tests to assemble byte by byte.
+type pageSpec struct {
+	serial, sequence uint32
+	flags            byte
+	granule          int64
+	// pieces are laced in order, each as a complete packet or the end of
+	// one, except that with open set the last piece is the start of a packet
+	// continued on the next page, a multiple of 255 bytes long.
+	pieces [][]byte
+	open   bool
+}
+
+// bytes returns the page with a valid checksum.
+func (s pageSpec) bytes(tb testing.TB) []byte {
+	tb.Helper()
+	var lacing, payload []byte
+	for i, piece := range s.pieces {
+		for n := len(piece); n >= 255; n -= 255 {
+			lacing = append(lacing, 255)
+		}
+		if s.open && i == len(s.pieces)-1 {
+			if len(piece)%255 != 0 {
+				tb.Fatalf("open piece of %d bytes", len(piece))
+			}
+		} else {
+			lacing = append(lacing, byte(len(piece)%255))
+		}
+		payload = append(payload, piece...)
+	}
+	if len(lacing) > maxSegments {
+		tb.Fatalf("%d segments", len(lacing))
+	}
+	page := make([]byte, headerSize, headerSize+len(lacing)+len(payload))
+	copy(page, "OggS")
+	page[5] = s.flags
+	binary.LittleEndian.PutUint64(page[6:], uint64(s.granule))
+	binary.LittleEndian.PutUint32(page[14:], s.serial)
+	binary.LittleEndian.PutUint32(page[18:], s.sequence)
+	page[26] = byte(len(lacing))
+	page = append(append(page, lacing...), payload...)
+	binary.LittleEndian.PutUint32(page[22:], crcUpdate(0, page))
+	return page
+}
+
+// filler returns n bytes of value b.
+func filler(n int, b byte) []byte { return bytes.Repeat([]byte{b}, n) }
+
+// spanningPacket returns a packet of n bytes that is not a run of one value,
+// so a fragment out of place would show.
+func spanningPacket(n int) []byte {
+	p := make([]byte, n)
+	for i := range p {
+		p[i] = byte(i * 7)
+	}
+	return p
+}
+
+// In a grouped bitstream a packet of the selected stream can span pages with
+// a page of another stream between them. When that page is corrupt it is
+// dropped, but the packet is intact and is delivered whole, whatever the
+// damage: nothing in a dropped page can be trusted, not even a serial number
+// that reads as the selected stream's, so only the selected stream's own
+// sequence numbers tell whether it lost a page. FFmpeg delivers the packet
+// too, except when a corrupt size runs past the end of the input: FFmpeg then
+// loses the pages it swallowed.
+func TestCorruptPageOfAnotherStreamKeepsSpanningPacket(t *testing.T) {
+	head, a0, a1 := []byte("head-a"), []byte("packet-a0"), []byte("packet-a1")
+	big := spanningPacket(700) // 510 bytes on one page, 190 on the next
+	pages := [][]byte{
+		pageSpec{serial: 1, flags: FlagBOS, pieces: [][]byte{head}}.bytes(t),
+		pageSpec{serial: 2, flags: FlagBOS, pieces: [][]byte{[]byte("head-b")}}.bytes(t),
+		pageSpec{serial: 1, sequence: 1, granule: 960, pieces: [][]byte{a0, big[:510]}, open: true}.bytes(t),
+		pageSpec{serial: 2, sequence: 1, granule: 960, pieces: [][]byte{filler(40, 0xff)}}.bytes(t),
+		pageSpec{serial: 1, sequence: 2, flags: FlagContinued | FlagEOS, granule: 2880, pieces: [][]byte{big[510:], a1}}.bytes(t),
+		pageSpec{serial: 2, sequence: 2, flags: FlagEOS, granule: 2880, pieces: [][]byte{filler(300, 0x02)}}.bytes(t),
+	}
+	const other = 3
+	want := [][]byte{head, a0, big, a1}
+	for name, corrupt := range map[string]func([]byte){
+		"payload byte":        func(p []byte) { p[headerSize+1+5] ^= 0x55 },
+		"version byte":        func(p []byte) { p[4] = 1 },
+		"serial of the other": func(p []byte) { binary.LittleEndian.PutUint32(p[14:], 1) },
+		"sequence number":     func(p []byte) { p[18] ^= 0x01 },
+		"flags":               func(p []byte) { p[5] = FlagBOS | FlagContinued },
+		// The first payload byte becomes a lacing value: the page claims
+		// 255 bytes more and ends inside the last page.
+		"segment count": func(p []byte) { p[26] = 2 },
+		// The page claims more bytes than the input holds.
+		"segment count past the end": func(p []byte) { p[26] = 255 },
+		"lacing value":               func(p []byte) { p[headerSize] = 200 },
+	} {
+		page := append([]byte(nil), pages[other]...)
+		corrupt(page)
+		input := bytes.Join([][]byte{bytes.Join(pages[:other], nil), page, bytes.Join(pages[other+1:], nil)}, nil)
+		r := NewReader(bytes.NewReader(input))
+		got, err := readAllPackets(r)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		expectPackets(t, name, got, want)
+		if r.DroppedPages() < 1 {
+			t.Fatalf("%s: no page dropped", name)
+		}
+	}
+
+	// When the input ends inside the other stream's page, the packet's
+	// second half never arrives: it is not delivered, and the truncation is
+	// reported.
+	input := bytes.Join(pages[:other], nil)
+	input = append(input, pages[other][:headerSize+10]...)
+	got, err := readAllPackets(NewReader(bytes.NewReader(input)))
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("truncated: want io.ErrUnexpectedEOF, got %v", err)
+	}
+	expectPackets(t, "truncated", got, [][]byte{head, a0})
+}
+
+// A corrupt page of the selected stream still costs the packets it carries
+// and the packet spanning it: its sequence number is missing when the
+// stream's next page arrives. Whether the page was in the middle of the
+// packet or completed it, the fragments around it are never joined, and the
+// packets after it are delivered.
+func TestCorruptPageOfTheSelectedStreamDropsSpanningPacket(t *testing.T) {
+	head, a0, a1, a2 := []byte("head-a"), []byte("packet-a0"), []byte("packet-a1"), []byte("packet-a2")
+	big := spanningPacket(900)  // pages 2, 3 and 5: 510, 255 and 135 bytes
+	next := spanningPacket(400) // pages 5 and 6: 255 and 145 bytes
+	pages := [][]byte{
+		pageSpec{serial: 1, flags: FlagBOS, pieces: [][]byte{head}}.bytes(t),
+		pageSpec{serial: 2, flags: FlagBOS, pieces: [][]byte{[]byte("head-b")}}.bytes(t),
+		pageSpec{serial: 1, sequence: 1, granule: 960, pieces: [][]byte{a0, big[:510]}, open: true}.bytes(t),
+		pageSpec{serial: 1, sequence: 2, flags: FlagContinued, granule: -1, pieces: [][]byte{big[510:765]}, open: true}.bytes(t),
+		pageSpec{serial: 2, sequence: 1, granule: 960, pieces: [][]byte{filler(40, 0xff)}}.bytes(t),
+		pageSpec{serial: 1, sequence: 3, flags: FlagContinued, granule: 2880, pieces: [][]byte{big[765:], a1, next[:255]}, open: true}.bytes(t),
+		pageSpec{serial: 1, sequence: 4, flags: FlagContinued | FlagEOS, granule: 4800, pieces: [][]byte{next[255:], a2}}.bytes(t),
+	}
+	for _, tc := range []struct {
+		name    string
+		page    int
+		corrupt func([]byte)
+		want    [][]byte
+	}{
+		{"inside the packet", 3, func(p []byte) { p[headerSize+1+9] ^= 0x01 }, [][]byte{head, a0, a1, next, a2}},
+		{"completing the packet", 5, func(p []byte) { p[len(p)-1] ^= 0x01 }, [][]byte{head, a0, a2}},
+		{"completing it, serial unreadable", 5, func(p []byte) { p[15] ^= 0x10 }, [][]byte{head, a0, a2}},
+		{"completing the next packet", 6, func(p []byte) { p[len(p)-1] ^= 0x01 }, [][]byte{head, a0, big, a1}},
+	} {
+		input := make([][]byte, len(pages))
+		copy(input, pages)
+		input[tc.page] = append([]byte(nil), pages[tc.page]...)
+		tc.corrupt(input[tc.page])
+		r := NewReader(bytes.NewReader(bytes.Join(input, nil)))
+		got, err := readAllPackets(r)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		expectPackets(t, tc.name, got, tc.want)
+		if r.DroppedPages() != 1 {
+			t.Fatalf("%s: DroppedPages() = %d, want 1", tc.name, r.DroppedPages())
+		}
+	}
+	got, err := readAllPackets(NewReader(bytes.NewReader(bytes.Join(pages, nil))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectPackets(t, "intact", got, [][]byte{head, a0, big, a1, next, a2})
 }
