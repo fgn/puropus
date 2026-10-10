@@ -72,9 +72,12 @@ and the header output gain are all applied. The 16 kHz output matches FFmpeg's
 default resampler. Audio the container lost, a corrupt Ogg page or WebM
 blocks a recorder dropped, is concealed for its duration, recovered from
 in-band FEC where the next packet has it, so every sample keeps its position
-in the recording, which ffmpeg does not do; a corrupt page of another grouped
-stream costs nothing, and a chained link whose last page is lost ends where
-the next one begins.
+in the recording, which ffmpeg does not do. Only a gap of half a packet or
+more counts, so the millisecond jitter of a browser's MediaRecorder
+timestamps is not mistaken for loss, and a recording without loss decodes to
+exactly ffmpeg's samples. A corrupt page of another grouped stream costs
+nothing, and a chained link whose last page is lost ends where the next one
+begins.
 
 With `Tolerant`, a packet that parses but cannot be decoded does not stop the
 stream. Its audio is recovered from the in-band FEC of the next packet when

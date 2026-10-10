@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
+	"math"
+	"math/rand/v2"
 	"slices"
 	"testing"
 	"time"
@@ -215,9 +218,10 @@ func TestContainerGapsAreConcealed(t *testing.T) {
 // A gap is found only where the container shows one: WebM timestamps
 // rounded to the millisecond, on 2.5 ms packets, or starting late, are not
 // gaps. A granule position that jumps without a lost page, against RFC 7845
-// §4.1, is filled up to the jump, so positions follow the granule positions,
-// and no gap is filled beyond 10 minutes, against a corrupt or hostile
-// granule position.
+// §4.1, by half a packet or more, is filled up to the jump, so positions
+// follow the granule positions; a smaller jump, a muxer's granule positions
+// slightly off, is not; and no gap is filled beyond 10 minutes, against a
+// corrupt or hostile granule position.
 func TestGapsAreOnlyWhereTheContainerShowsThem(t *testing.T) {
 	short, err := opus.Silence(1, opus.BandwidthFullband, 2500*time.Microsecond)
 	if err != nil {
@@ -244,6 +248,7 @@ func TestGapsAreOnlyWhereTheContainerShowsThem(t *testing.T) {
 	for _, tc := range []struct {
 		jump, want time.Duration
 	}{
+		{2500 * time.Microsecond, 3000 * ms}, // an eighth of the 20 ms packets
 		{20 * ms, 3020 * ms},
 		{11 * time.Minute, 3*time.Second + 10*time.Minute},
 	} {
@@ -263,4 +268,148 @@ func TestGapsAreOnlyWhereTheContainerShowsThem(t *testing.T) {
 			}
 		}
 	}
+}
+
+// The gap rules: a WebM block is late only by half a packet or more and by
+// more than a timestamp tick, and then whole packets are missing; an Ogg
+// page's missing audio counts exactly, once it reaches half a packet.
+func TestGapRules(t *testing.T) {
+	for _, tc := range []struct {
+		late, next, tick int64
+		want             int
+	}{
+		{0, 2880, 48, 0},
+		{96, 2880, 48, 0},      // Chrome's 2 ms of jitter
+		{288, 2880, 48, 0},     // and its 6 ms
+		{-288, 2880, 48, 0},    // early
+		{1439, 2880, 48, 0},    // just under half a packet
+		{1440, 2880, 48, 2880}, // half: one packet
+		{2880 - 288, 2880, 48, 2880},
+		{2880 + 288, 2880, 48, 2880},
+		{2*2880 + 96, 2880, 48, 2 * 2880},
+		{479, 960, 48, 0},
+		{480, 960, 48, 960},
+		{480, 960, 480, 0}, // a tick of 10 ms is rounding, not loss
+		{481, 960, 480, 960},
+		{1000, 0, 48, 0}, // a packet that does not parse has no duration to count in
+		{1 << 40, 2880, 48, maxGap / 2880 * 2880},
+	} {
+		if got := webmGap(tc.late, tc.next, tc.tick); got != tc.want {
+			t.Errorf("webmGap(%d, %d, %d) = %d, want %d", tc.late, tc.next, tc.tick, got, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		missing int64
+		next    int
+		want    int
+	}{
+		{479, 960, 0},
+		{480, 960, 480},
+		{1000, 960, 1000},
+		{1 << 40, 960, maxGap},
+	} {
+		if got := concealedGap(tc.missing, tc.next); got != tc.want {
+			t.Errorf("concealedGap(%d, %d) = %d, want %d", tc.missing, tc.next, got, tc.want)
+		}
+	}
+}
+
+// timestampedWebM writes mono packets as a WebM file with the given
+// TimecodeScale (nanoseconds per tick), each block in a Cluster of its own at
+// ticks[i], the timestamps a recorder chose rather than the samples' clock.
+func timestampedWebM(t *testing.T, packets [][]byte, scale uint64, ticks []int64) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	w, err := webm.NewWriter(&buf, webm.WriterOptions{Channels: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	file := buf.Bytes()
+	msScale := []byte{0x2a, 0xd7, 0xb1, 0x83, 0x0f, 0x42, 0x40} // TimecodeScale 1000000
+	at := bytes.Index(file, msScale)
+	if at < 0 || scale >= 1<<24 {
+		t.Fatal("cannot set the TimecodeScale")
+	}
+	file[at+4], file[at+5], file[at+6] = byte(scale>>16), byte(scale>>8), byte(scale)
+	element := func(dst []byte, id []byte, payload []byte) []byte {
+		dst = append(dst, id...)
+		size := uint64(len(payload))
+		dst = append(dst, 0x01, byte(size>>48), byte(size>>40), byte(size>>32), byte(size>>24), byte(size>>16), byte(size>>8), byte(size))
+		return append(dst, payload...)
+	}
+	for i, p := range packets {
+		ts := uint64(ticks[i])
+		cluster := element(nil, []byte{0xe7}, []byte{byte(ts >> 24), byte(ts >> 16), byte(ts >> 8), byte(ts)})
+		cluster = element(cluster, []byte{0xa3}, append([]byte{0x81, 0, 0, 0x80}, p...))
+		file = element(file, []byte{0x1f, 0x43, 0xb6, 0x75}, cluster)
+	}
+	return file
+}
+
+// Recorders timestamp WebM blocks with their capture clock, rounded to a
+// tick: Chrome's lands milliseconds off the samples' clock (0, 61, 120, 181,
+// ..., 422 for 60 ms packets), which is not lost audio. With such jitter, up
+// to ±3 ms around the true times, at 1 ms, 100 µs and 10 ms ticks, a stream
+// of 60 or 20 ms packets decodes to exactly its packets, as ffmpeg does and
+// bit for bit as with exact timestamps; a lost block among them still
+// conceals exactly one packet's duration. puropus used to read every 2 ms
+// excess as 2.5 ms of lost audio.
+func TestWebMTimestampJitterIsNotAGap(t *testing.T) {
+	for _, tc := range []struct {
+		fixture string
+		repeat  int
+	}{
+		{"webm-celt-60ms.webm", 6}, // 300 packets
+		{"webm-celt-20ms.webm", 2}, // 300 packets
+	} {
+		once := fixturePackets(t, tc.fixture)
+		packets := make([][]byte, 0, tc.repeat*len(once))
+		for range tc.repeat {
+			packets = append(packets, once...)
+		}
+		parsed, err := opus.Parse(packets[0], false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d := int64(parsed.Duration48())
+		exact, _ := decodeAll(t, bytes.NewReader(timestampedWebM(t, packets, 1000000, multiples(len(packets), d/48))), DecodeOptions{})
+		if int64(len(exact)) != int64(len(packets))*d {
+			t.Fatalf("%s: %d samples from exact timestamps", tc.fixture, len(exact))
+		}
+		for _, scale := range []uint64{1000000, 100000, 10000000} {
+			rng := rand.New(rand.NewPCG(uint64(d), scale))
+			ticks := make([]int64, len(packets))
+			for i := range ticks {
+				ns := float64(int64(i)*d*int64(time.Second)/SampleRate) + (rng.Float64()*6-3)*1e6
+				ticks[i] = max(int64(math.Round(ns/float64(scale))), 0)
+			}
+			name := fmt.Sprintf("%s, %d ns ticks", tc.fixture, scale)
+			got, _ := decodeAll(t, bytes.NewReader(timestampedWebM(t, packets, scale, ticks)), DecodeOptions{})
+			if !slices.Equal(got, exact) {
+				t.Fatalf("%s: %d samples, want the %d of the packets", name, len(got), len(exact))
+			}
+			// Lose block 100, keeping the others' timestamps.
+			lostPackets := slices.Concat(packets[:100], packets[101:])
+			lostTicks := slices.Concat(ticks[:100], ticks[101:])
+			src, err := ReadPackets(bytes.NewReader(timestampedWebM(t, lostPackets, scale, lostTicks)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hole := src.Packets[100].Start - src.Packets[99].End(); hole != d || src.Duration() != samplesToDuration(int64(len(packets))*d) {
+				t.Fatalf("%s: a lost block leaves a hole of %d samples, want %d", name, hole, d)
+			}
+		}
+	}
+}
+
+// multiples returns n multiples of step, from 0.
+func multiples(n int, step int64) []int64 {
+	out := make([]int64, n)
+	for i := range out {
+		out[i] = int64(i) * step
+	}
+	return out
 }

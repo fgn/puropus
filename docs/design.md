@@ -181,29 +181,49 @@ input does.
 A stretch the container lost, an Ogg page dropped for a bad checksum or a
 WebM block a recorder left out, is concealed for its duration, in strict and
 `Tolerant` mode alike, so `Position`, the retained packets and every later
-sample keep the input's timeline, which VAD and ASR alignment need. The Ogg
-source finds the gap from the next page's granule position, which counts
-exactly the samples of the packets on the page (RFC 7845 §4.1), and the WebM
-source from the next block's timestamp, when it is past the end of the block
-before by more than the timestamps' resolution, on the 2.5 ms grid of Opus
-frames. The gap then comes out as the lost packets would in `Tolerant` mode,
-in parts of the next packet's duration: concealed, and its last part
-decoded from that packet's in-band FEC when it has some
+sample keep the input's timeline, which VAD and ASR alignment need. The gap
+is measured before each packet against the one before it, never against the
+start of the stream, and counts only when it is at least half the duration
+of the packet after it:
+
+- The Ogg source takes the gap from the next page's granule position, which
+  counts exactly the samples of the packets on the page (RFC 7845 §4.1), so
+  the gap is the exact difference. Less than half a packet is not a lost
+  packet but a muxer's granule positions slightly off, and is ignored.
+- The WebM source takes it from the next block's timestamp against the end
+  of the block before: that block's timestamp plus its duration. Browsers
+  stamp blocks with their capture clock rounded to the millisecond, not with
+  the samples' clock: Chrome's MediaRecorder, recording through Web Audio,
+  lands up to 6 ms either side on its 60 ms packets (0, 65, 127, 182, ...
+  ms) without drifting away. So a block is
+  late only by half a packet or more, and by more than a tick of the
+  timestamps, which rounding alone can make; then as many whole packets of
+  its duration are missing as the lateness rounds to, since blocks are lost
+  whole. Jitter, a block early, and a lateness of less than half a packet
+  conceal nothing. Pausing a MediaRecorder leaves no trace: Chrome's
+  timestamps run on without the paused time, through Web Audio or not.
+
+The gap then comes out as the lost packets would in `Tolerant` mode, in
+parts of the next packet's duration: concealed, and its last part decoded
+from that packet's in-band FEC when it has some
 (`TestContainerGapsAreConcealed`). Granule positions that jump with no page
-lost, against §4.1, are filled the same way, so positions follow them, as
-is the duration of a packet that does not parse, which the next granule
-position or timestamp shows. A gap before the first audio page or block of
-a link is not found, since a first granule position or timestamp may be an
-offset (RFC 7845 §4.5), nor is one at the end of a link or file, which
-nothing after it shows. On a final Ogg page the lost audio and the end
-trimming cannot be told apart, so the gap reaches the final granule position
-and the last packet keeps its encoder padding, its audio up to its length
-early. No gap is filled beyond 10 minutes, against a corrupt or hostile
-granule position or timestamp. The retained packets leave a hole where the
-gap is, which the retained native PCM covers with the concealment and a cut
-fills with silence. ffmpeg drops the lost audio, so its output is shorter
-by it and every later sample comes early: 96 000 samples instead of 144 000
-for a lost Ogg page of 1 s, 135 360 for three lost WebM blocks of 60 ms.
+lost, against §4.1, by half a packet or more are filled the same way, so
+positions follow them, as is the duration of a packet that does not parse,
+which the next Ogg granule position shows. A gap before the first audio
+page or block of a link is not found, since a first granule position or
+timestamp may be an offset (RFC 7845 §4.5), nor is one at the end of a link
+or file, which nothing after it shows. On a final Ogg page the lost audio
+and the end trimming cannot be told apart, so the gap reaches the final
+granule position and the last packet keeps its encoder padding, its audio
+up to its length early. No gap is filled beyond 10 minutes, against a
+corrupt or hostile granule position or timestamp. The retained packets
+leave a hole where the gap is, which the retained native PCM covers with
+the concealment and a cut fills with silence. ffmpeg drops the lost audio,
+so its output is shorter by it and every later sample comes early: 96 000
+samples instead of 144 000 for a lost Ogg page of 1 s, 135 360 for three
+lost WebM blocks of 60 ms. On recordings without loss the two agree, as
+for timestamps with ±3 ms of jitter at 1 ms, 100 µs and 10 ms ticks
+(`TestWebMTimestampJitterIsNotAGap`).
 
 The WebM writer produces the single-track, unknown-size-Segment, 1 ms
 timestamp profile that browsers emit, splitting clusters before a relative

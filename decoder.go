@@ -617,7 +617,7 @@ type oggSource struct {
 	pageDuration    int64
 	previousGranule int64
 	haveGranule     bool
-	gap             int // lost audio found on a page without audio packets, before the next one
+	gap             int64 // lost audio found, before the page's first packet or the next page's
 }
 
 // maxGap bounds the audio the Decoder conceals for one gap in the container,
@@ -726,12 +726,7 @@ func (s *oggSource) readPage() error {
 		// be told apart, so the gap reaches the final granule position and
 		// nothing is trimmed. A first page's larger granule position is an
 		// offset (RFC 7845 §4.5), not a gap.
-		gap := int(min(last.Granule-expected, maxGap))
-		if s.linkStart < len(s.page) {
-			s.page[s.linkStart].meta.gapBefore += gap
-		} else {
-			s.gap += gap
-		}
+		s.gap += last.Granule - expected
 	case last.EOS && expected > last.Granule:
 		trim := expected - last.Granule
 		for i := len(s.page) - 1; i >= s.linkStart && trim > 0; i-- {
@@ -740,10 +735,26 @@ func (s *oggSource) readPage() error {
 			trim -= t
 		}
 	}
+	if s.gap > 0 && s.linkStart < len(s.page) {
+		first := &s.page[s.linkStart]
+		first.meta.gapBefore = concealedGap(s.gap, first.duration)
+		s.gap = 0
+	}
 	s.previousGranule = last.Granule
 	s.haveGranule = true
 	s.pageDuration = 0
 	return nil
+}
+
+// concealedGap returns how much of the audio missing before a packet of next
+// samples the Decoder conceals: none when it is less than half the packet,
+// which no lost packet explains (a muxer's granule positions slightly off,
+// say), and all of it otherwise, up to maxGap.
+func concealedGap(missing int64, next int) int {
+	if missing < int64(next+1)/2 {
+		return 0
+	}
+	return int(min(missing, maxGap))
 }
 
 // queue adds a packet of the page being read: a chained link's OpusHead
@@ -776,7 +787,6 @@ func (s *oggSource) queue(p ogg.Packet) error {
 		return nil
 	}
 	packet := oggPacket{data: p.Data}
-	packet.meta.gapBefore, s.gap = s.gap, 0
 	if s.pendingLink {
 		packet.meta.newLink = true
 		packet.meta.preSkip = s.pendingPreSkip
@@ -834,6 +844,22 @@ func openWebM(br *bufio.Reader) (packetSource, Header, error) {
 
 func (s *webmSource) reuseData() { s.r.ReuseBlockData() }
 
+// webmGap returns the audio missing before a block of next samples that
+// starts late samples after the block before it ends, its timestamps having
+// a resolution of tick samples. Browsers timestamp blocks with their capture
+// clock, rounded to the millisecond: Chrome's, through Web Audio, lands up
+// to ±6 ms off the samples' clock on 60 ms packets. So a block is late only
+// by half a packet or more, and by more than a tick, which rounding alone
+// can make it; then whole packets of its duration are missing, as many as
+// the lateness rounds to, since blocks are lost whole.
+func webmGap(late, next, tick int64) int {
+	if next <= 0 || late < (next+1)/2 || late <= tick {
+		return 0
+	}
+	packets := min((late+next/2)/next, maxGap/next)
+	return int(packets * next)
+}
+
 func (s *webmSource) next() ([]byte, packetMeta, error) {
 	b, err := s.r.Next()
 	if err != nil {
@@ -848,18 +874,17 @@ func (s *webmSource) next() ([]byte, packetMeta, error) {
 	case b.DiscardPadding < 0:
 		meta.trimStart = int(durationToSamples(-b.DiscardPadding))
 	}
-	// A block that starts later than the one before it ends, by more than
-	// the timestamps' rounding, follows lost blocks: the gap is the
-	// difference on the 2.5 ms grid of Opus frames. The first block's
-	// timestamp is where the stream starts.
-	at := durationToSamples(b.Timestamp)
-	if late := at - s.expected; s.started && late > s.tick {
-		meta.gapBefore = int(min((late+60)/120*120, maxGap))
-	}
 	coded := int64(0)
 	if parsed, err := opus.Parse(b.Data, false); err == nil {
 		coded = int64(parsed.Duration48())
 	}
+	at := durationToSamples(b.Timestamp)
+	if s.started {
+		meta.gapBefore = webmGap(at-s.expected, coded, s.tick)
+	}
+	// Each block is measured against the one before it, never against the
+	// first: recorders timestamp blocks with a capture clock that drifts
+	// against the samples.
 	s.expected, s.started = at+coded, true
 	return b.Data, meta, nil
 }
