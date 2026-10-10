@@ -41,33 +41,83 @@ func kernels() []kernel {
 // A group needs src[0 : 9+nTaps]. Trailing outputs that do not fill a group
 // go through the same group code on a zero-padded copy of their input, so
 // every output has the same bits however the outputs are grouped.
+//
+// Each tier has its own driver, filterAVX, filterAVX2, filterAVX2FMA and
+// filterAVX512, which calls its group function directly. Called through a
+// function value, the group function could keep its arguments for all escape
+// analysis knows, so the partial group's buffers would move to the heap and
+// every call ending in one would allocate.
 
 // groupSrc is the input one group of four outputs reads.
 const groupSrc = 3*3 + nTaps
 
-type groupFunc func(dst *[4]float32, src []float32)
-
-// runGroups computes dst with group, four outputs at a time.
-func runGroups(dst, src []float32, group groupFunc) {
+// filterAVX computes dst with groupAVX, four outputs at a time.
+func filterAVX(dst, src []float32) {
 	k := 0
 	for ; k+4 <= len(dst); k += 4 {
-		group((*[4]float32)(dst[k:]), src[3*k:])
+		groupAVX((*[4]float32)(dst[k:]), src[3*k:])
 	}
 	if k < len(dst) {
 		var w [groupSrc]float32
 		var y [4]float32
 		copy(w[:], src[3*k:])
-		group(&y, w[:])
+		groupAVX(&y, w[:])
 		archsimd.ClearAVXUpperBits()
 		copy(dst[k:], y[:])
 	}
 	archsimd.ClearAVXUpperBits()
 }
 
-func filterAVX(dst, src []float32)     { runGroups(dst, src, groupAVX) }
-func filterAVX2(dst, src []float32)    { runGroups(dst, src, groupAVX2) }
-func filterAVX2FMA(dst, src []float32) { runGroups(dst, src, groupAVX2FMA) }
-func filterAVX512(dst, src []float32)  { runGroups(dst, src, groupAVX512) }
+// filterAVX2 computes dst with groupAVX2, four outputs at a time.
+func filterAVX2(dst, src []float32) {
+	k := 0
+	for ; k+4 <= len(dst); k += 4 {
+		groupAVX2((*[4]float32)(dst[k:]), src[3*k:])
+	}
+	if k < len(dst) {
+		var w [groupSrc]float32
+		var y [4]float32
+		copy(w[:], src[3*k:])
+		groupAVX2(&y, w[:])
+		archsimd.ClearAVXUpperBits()
+		copy(dst[k:], y[:])
+	}
+	archsimd.ClearAVXUpperBits()
+}
+
+// filterAVX2FMA computes dst with groupAVX2FMA, four outputs at a time.
+func filterAVX2FMA(dst, src []float32) {
+	k := 0
+	for ; k+4 <= len(dst); k += 4 {
+		groupAVX2FMA((*[4]float32)(dst[k:]), src[3*k:])
+	}
+	if k < len(dst) {
+		var w [groupSrc]float32
+		var y [4]float32
+		copy(w[:], src[3*k:])
+		groupAVX2FMA(&y, w[:])
+		archsimd.ClearAVXUpperBits()
+		copy(dst[k:], y[:])
+	}
+	archsimd.ClearAVXUpperBits()
+}
+
+// filterAVX512 computes dst with groupAVX512, four outputs at a time.
+func filterAVX512(dst, src []float32) {
+	k := 0
+	for ; k+4 <= len(dst); k += 4 {
+		groupAVX512((*[4]float32)(dst[k:]), src[3*k:])
+	}
+	if k < len(dst) {
+		var w [groupSrc]float32
+		var y [4]float32
+		copy(w[:], src[3*k:])
+		groupAVX512(&y, w[:])
+		archsimd.ClearAVXUpperBits()
+		copy(dst[k:], y[:])
+	}
+	archsimd.ClearAVXUpperBits()
+}
 
 // groupAVX uses 128-bit vectors, multiplies and adds.
 func groupAVX(dst *[4]float32, src []float32) {

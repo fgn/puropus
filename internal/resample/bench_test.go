@@ -6,10 +6,11 @@ import (
 	"testing"
 )
 
-// BenchmarkProcess resamples 20 ms packets (960 samples) with each kernel the
-// CPU supports and reports the time per output sample.
+// BenchmarkProcess resamples packets of 123, 960 and 5760 samples with each
+// kernel the CPU supports and reports the time per output sample. 123 inputs
+// make 41 outputs per call, so every call ends with a partial group.
 func BenchmarkProcess(b *testing.B) {
-	for _, size := range []int{960, 5760} {
+	for _, size := range []int{123, 960, 5760} {
 		in := randomSignal(rand.New(rand.NewPCG(1, 2)), size)
 		out := make([]float32, size/3+256)
 		saved := selected
@@ -18,6 +19,7 @@ func BenchmarkProcess(b *testing.B) {
 			b.Run(k.name+"/"+strconv.Itoa(size), func(b *testing.B) {
 				var r Resampler48To16
 				outputs := 0
+				b.ReportAllocs()
 				for b.Loop() {
 					outputs += r.Process(in, out)
 				}

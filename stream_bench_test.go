@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/fgn/puropus/internal/webm"
 )
 
 // benchStream is one recording, held in memory, with its packet count.
@@ -128,7 +130,9 @@ func BenchmarkStreamTo16k(b *testing.B) {
 
 // TestReadDoesNotAllocate requires Read to allocate nothing per packet once
 // decoding has started, at 48 and 16 kHz, from Ogg and WebM, mono and
-// stereo, when packets are not kept.
+// stereo, when packets are not kept. Two of the streams discard a few
+// samples from every WebM block, so the resampler's output per packet is
+// rarely a multiple of four (its vector kernels compute four at a time).
 func TestReadDoesNotAllocate(t *testing.T) {
 	stereo, _ := stereoStreamReference(t, "modes")
 	var stereoOgg, stereoWebM bytes.Buffer
@@ -147,6 +151,8 @@ func TestReadDoesNotAllocate(t *testing.T) {
 		"stereo modes WebM":         stereoWebM.Bytes(),
 		"ogg-switch-silk-celt-wb":   readFixture(t, "ogg-switch-silk-celt-wb.opus"),
 		"ogg-silk-wb-60ms-fec.opus": readFixture(t, "ogg-silk-wb-60ms-fec.opus"),
+		"trimmed blocks, mono":      paddedWebM(t, 1, sourceFor(t, "webm-celt-60ms.webm").Packets),
+		"trimmed blocks, stereo":    paddedWebM(t, 2, stereo.Packets),
 	}
 	for name, data := range streams {
 		for _, rate := range []int{48000, 16000} {
@@ -154,23 +160,57 @@ func TestReadDoesNotAllocate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Each read takes 100 ms of audio, at least one packet, so an
-			// allocation per packet shows as one per read (AllocsPerRun
-			// rounds down); the first 200 ms grow the buffers.
+			// Each read takes 100 ms of audio; the first 200 ms grow the
+			// buffers, and the next 500 ms, several packets, must not
+			// allocate.
 			buf := make([]float32, rate/10*d.Channels())
 			for i := 0; i < 2; i++ {
 				if _, err := d.Read(buf); err != nil {
 					t.Fatal(err)
 				}
 			}
-			allocs := testing.AllocsPerRun(4, func() {
-				if _, err := d.Read(buf); err != nil {
-					t.Fatal(err)
+			allocs := allocations(func() {
+				for range 5 {
+					if _, err := d.Read(buf); err != nil {
+						t.Fatal(err)
+					}
 				}
 			})
 			if allocs != 0 {
-				t.Errorf("%s at %d Hz: %v allocations per read", name, rate, allocs)
+				t.Errorf("%s at %d Hz: %d allocations in 5 reads", name, rate, allocs)
 			}
 		}
 	}
+}
+
+// paddedWebM writes packets as a WebM whose every block discards one to
+// seven samples at its end.
+func paddedWebM(t *testing.T, channels int, packets []Packet) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	w, err := webm.NewWriter(&b, webm.WriterOptions{Channels: channels})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, p := range packets {
+		if err := w.WriteBlock(p.Data, p.Coded(), 1+i%7); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+// allocations returns the number of heap allocations f makes. It counts each
+// one: testing.AllocsPerRun reports the mean per run rounded down, which reads
+// as zero when not every run allocates.
+func allocations(f func()) uint64 {
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.Mallocs - before.Mallocs
 }

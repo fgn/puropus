@@ -81,16 +81,17 @@ tasks:
       # Each GODEBUG setting hides one more CPU feature, stepping the
       # resampler's kernel down from AVX-512 (where present) through
       # AVX2+FMA, AVX2 and AVX to scalar; TestTierMatchesCPU checks the
-      # selection, the kernel and golden tests the output, and the root
-      # package's preemption test the vector state under each kernel.
+      # selection, the kernel and golden tests the output, the allocation
+      # tests the steady state, and the root package's preemption test the
+      # vector state under each kernel.
       # GOAMD64=v3 builds cannot hide AVX, AVX2 or FMA, so this runs the
       # default GOAMD64=v1 build.
       - for: ["", "cpu.avx512f=off", "cpu.avx512f=off,cpu.fma=off", "cpu.avx512f=off,cpu.avx2=off", "cpu.avx=off"]
         cmd: >
           CGO_ENABLED=0 GOAMD64=v1 GODEBUG={{.ITEM}} GOEXPERIMENT=simd go test -count=1 -timeout 120s
-          ./internal/resample -run 'TestTierMatchesCPU|TestAcceleration|TestKernelsMatchScalar|TestNoAVXFallsBackToScalar|TestFFmpeg|TestRepositoryGoldens|TestChunkInvariance'
+          ./internal/resample -run 'TestTierMatchesCPU|TestAcceleration|TestKernelsMatchScalar|TestNoAVXFallsBackToScalar|TestFFmpeg|TestRepositoryGoldens|TestChunkInvariance|TestNoAllocationsInSteadyState'
       - for: ["", "cpu.avx512f=off", "cpu.avx512f=off,cpu.fma=off", "cpu.avx512f=off,cpu.avx2=off", "cpu.avx=off"]
-        cmd: CGO_ENABLED=0 GOAMD64=v1 GODEBUG={{.ITEM}} GOEXPERIMENT=simd go test -count=1 -timeout 120s . -run 'TestDecodeSurvivesPreemption|TestDecodeMatchesReferenceAt16kHz'
+        cmd: CGO_ENABLED=0 GOAMD64=v1 GODEBUG={{.ITEM}} GOEXPERIMENT=simd go test -count=1 -timeout 120s . -run 'TestDecodeSurvivesPreemption|TestDecodeMatchesReferenceAt16kHz|TestReadDoesNotAllocate'
       # The SILK kernels (AVX or scalar): selection, kernels against their
       # scalar code and libopus's loops, fixtures, and preemption.
       - for: ["", "cpu.avx512f=off", "cpu.avx512f=off,cpu.fma=off", "cpu.avx512f=off,cpu.avx2=off", "cpu.avx=off"]

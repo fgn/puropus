@@ -195,7 +195,10 @@ scalar kernel, `accel_*.go` the dispatch and vector kernels.
   while the upper register halves are dirty (an earlier per-output scalar
   reduction made the 256-bit kernels ten times slower). Trailing outputs that
   do not fill a group run through the same group code on a zero-padded copy
-  of their input, so grouping never changes the bits. 256-bit kernels run only
+  of their input, so grouping never changes the bits. Each tier has its own
+  driver loop that calls its group function directly; through a function
+  value, escape analysis moved the padded copy to the heap, two allocations
+  in every call that ended in a partial group. 256-bit kernels run only
   when AVX2 is present and 512-bit ones only with AVX-512; every kernel ends
   with `ClearAVXUpperBits`. Dispatch requires AVX for any vector kernel
   (`GODEBUG=cpu.avx=off` leaves AVX2/FMA reported but selects scalar).
@@ -221,8 +224,12 @@ scalar kernel, `accel_*.go` the dispatch and vector kernels.
   7, 120, 960, 5760 and random sizes and for Flush buffers of 1 sample; empty
   input, Flush without input or repeated, every stream length 1 … 66, reuse
   after a complete and an unfinished Flush, too-small output buffers, the
-  decoder's `len(in)/3 + 256` sizing, no allocations in steady state, int64
-  counters.
+  decoder's `len(in)/3 + 256` sizing, int64 counters. No allocations in
+  steady state with each kernel, for Process calls that produce 0 … 4, 41,
+  320, 959 and 1920 outputs and for Flush, counted over hundreds of calls
+  rather than averaged (an average rounds a rare allocation down to zero);
+  the root package's `TestReadDoesNotAllocate` does the same for `Read`, on
+  WebM streams whose every block discards a few samples.
 - Kernels: every vector kernel against scalar (exact, or within the stated
   bound for fused kernels), with exactly sized input so over-reads panic;
   dispatch against the CPU features.

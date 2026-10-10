@@ -122,7 +122,8 @@ tier reproduces FFmpeg n9.0.2's bits on the machine that made the goldens
   reruns the kernel, dispatch, golden and reference-sequence tests of each
   package under `GODEBUG` settings that hide one CPU feature after another
   (`cpu.avx512f=off`, then FMA, AVX2 and AVX), so every tier the CPU can
-  reach, down to scalar, runs; a tier test in each package
+  reach, down to scalar, runs, along with the resampler's and the root
+  package's allocation tests; a tier test in each package
   (`TestTierMatchesCPU`, `TestSilkPCMTierMatchesCPU`) checks that the
   selection follows the features. A `GOAMD64=v3` build cannot hide
   AVX, AVX2 or FMA, so this task uses `v1`.

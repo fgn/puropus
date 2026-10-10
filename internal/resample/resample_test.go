@@ -3,6 +3,7 @@ package resample
 import (
 	"math"
 	"math/rand/v2"
+	"runtime"
 	"slices"
 	"testing"
 )
@@ -259,20 +260,58 @@ func TestOutputBound(t *testing.T) {
 	}
 }
 
+// TestNoAllocationsInSteadyState requires Process and Flush, with each kernel,
+// to allocate nothing once the buffer has grown. The chunk sizes give output
+// counts that are and are not multiples of four, the vector kernels' group
+// size, so the partial group at the end of a call is covered too.
 func TestNoAllocationsInSteadyState(t *testing.T) {
-	rng := rand.New(rand.NewPCG(14, 15))
-	in := randomSignal(rng, 5760)
-	out := make([]float32, len(in)/3+256)
-	var r Resampler48To16
-	r.Process(in, out)
-	sizes := []int{120, 960, 1920, 2880, 5760}
-	i := 0
-	if a := testing.AllocsPerRun(200, func() {
-		r.Process(in[:sizes[i%len(sizes)]], out)
-		i++
-	}); a != 0 {
-		t.Fatalf("%v allocations per Process", a)
-	}
+	forEachKernel(t, func(t *testing.T) {
+		rng := rand.New(rand.NewPCG(14, 15))
+		in := randomSignal(rng, 5760)
+		out := make([]float32, len(in)/3+256)
+		var r Resampler48To16
+		// 41, 0 to 4, 320, 959 and 1920 outputs per call.
+		sizes := []int{123, 1, 2, 3, 7, 11, 960, 2877, 5760}
+		process := func() {
+			for _, size := range sizes {
+				r.Process(in[:size], out)
+			}
+		}
+		process()
+		if n := allocations(func() {
+			for range 50 {
+				process()
+			}
+		}); n != 0 {
+			t.Errorf("%d allocations in %d calls of Process", n, 50*len(sizes))
+		}
+		// Streams of 1000 samples, flushed 1 to 17 outputs at a time.
+		stream := func(flush int) {
+			r.Process(in[:1000], out)
+			for r.Flush(out[:flush]) > 0 {
+			}
+		}
+		stream(1)
+		if n := allocations(func() {
+			for i := range 50 {
+				stream(1 + i%17)
+			}
+		}); n != 0 {
+			t.Errorf("%d allocations in 50 flushed streams", n)
+		}
+	})
+}
+
+// allocations returns the number of heap allocations f makes. It counts each
+// one: testing.AllocsPerRun reports the mean per run rounded down, which reads
+// as zero when not every run allocates.
+func allocations(f func()) uint64 {
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.Mallocs - before.Mallocs
 }
 
 // TestLongStreamCounters checks that streams longer than 2^31 samples count
