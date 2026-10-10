@@ -176,6 +176,9 @@ func (d *Decoder) Source() Source {
 	return Source{Header: d.header, Packets: d.packets, Native: d.nativePCM()}
 }
 
+// nativePCM returns the retained native PCM: nil when it is not kept, and
+// non-nil, if empty, when it is, so that Cut can tell packets that decode to
+// nothing (all inside the pre-skip, say) from PCM that was never kept.
 func (d *Decoder) nativePCM() []float32 {
 	if !d.opts.KeepNative {
 		return nil
@@ -184,10 +187,10 @@ func (d *Decoder) nativePCM() []float32 {
 	for _, b := range d.nativeBlocks {
 		total += len(b)
 	}
-	if len(d.nativeCache) == total {
+	if d.nativeCache != nil && len(d.nativeCache) == total {
 		return d.nativeCache
 	}
-	out := make([]float32, 0, total)
+	out := make([]float32, 0, total) // not nil, even when total is 0
 	for _, b := range d.nativeBlocks {
 		out = append(out, b...)
 	}

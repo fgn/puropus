@@ -94,8 +94,9 @@ type Source struct {
 	Packets []Packet
 	// Native holds the decoded 48 kHz interleaved PCM of Packets before
 	// output gain, starting at Packets[0].Start and covering every packet.
-	// It is only required for SnapExact and is nil unless the Decoder was
-	// asked to keep it.
+	// It is only required for SnapExact. It is nil unless the Decoder was
+	// asked to keep it, and then not nil even when the packets decode to
+	// nothing.
 	Native []float32
 }
 

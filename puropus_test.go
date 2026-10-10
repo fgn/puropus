@@ -617,3 +617,40 @@ func TestReleasePacketsKeepsNativeAlignedWithPackets(t *testing.T) {
 		}
 	}
 }
+
+// A Decoder that keeps native PCM returns it non-nil even when its packets
+// decode to nothing, here because they all lie inside the pre-skip: Cut tells
+// that from native PCM that was never kept, so an exact cut of such a source
+// is empty rather than ErrNativeRequired. Releasing every packet leaves the
+// native PCM empty, not nil; without KeepNative it is nil.
+func TestKeptNativeIsNotNilWhenNothingDecodes(t *testing.T) {
+	base := sourceFor(t, "ogg-celt-short.opus")
+	packets := make([]Packet, len(base.Packets))
+	for i, p := range base.Packets {
+		packets[i] = Packet{Data: p.Data, Skip: p.Coded()}
+	}
+	var buf bytes.Buffer
+	if err := (&Stream{Header: base.Header, Packets: packets}).WriteOgg(&buf); err != nil {
+		t.Fatal(err)
+	}
+	pcm, dec := decodeAll(t, bytes.NewReader(buf.Bytes()), DecodeOptions{KeepNative: true})
+	src := dec.Source()
+	if len(pcm) != 0 || len(src.Packets) != len(packets) || src.Duration() != 0 {
+		t.Fatalf("%d samples from %d packets covering %v, want none from %d", len(pcm), len(src.Packets), src.Duration(), len(packets))
+	}
+	if src.Native == nil || len(src.Native) != 0 {
+		t.Fatalf("native PCM %v (nil %v), want empty and not nil", src.Native, src.Native == nil)
+	}
+	out, err := Cut(src, Edit{Keep: []Interval{{0, time.Second}}, Snap: SnapExact, Encoder: silenceEncoder{}})
+	if err != nil || len(out.Packets) != 0 {
+		t.Fatalf("exact cut: %v, %d packets", err, len(out.Packets))
+	}
+	dec.ReleasePackets(time.Second)
+	if src := dec.Source(); len(src.Packets) != 0 || src.Native == nil || len(src.Native) != 0 {
+		t.Fatalf("after releasing everything: %d packets, native %v (nil %v)", len(src.Packets), src.Native, src.Native == nil)
+	}
+	_, dec = decodeAll(t, bytes.NewReader(buf.Bytes()), DecodeOptions{KeepPackets: true})
+	if src := dec.Source(); len(src.Packets) != len(packets) || src.Native != nil {
+		t.Fatalf("without KeepNative: %d packets, native %v (nil %v)", len(src.Packets), src.Native, src.Native == nil)
+	}
+}
