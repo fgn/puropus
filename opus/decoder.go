@@ -61,8 +61,8 @@ const (
 	bandwidthNone Bandwidth = -1
 )
 
-// Reasons DecodeParsed and Conceal fail. A packet that does not parse fails
-// with Parse's error.
+// Reasons DecodeParsed, Conceal and DecodeFEC fail. A packet that does not
+// parse fails with Parse's error.
 var (
 	// errBufferTooSmall is OPUS_BUFFER_TOO_SMALL: out cannot hold the
 	// decoded samples.
@@ -70,8 +70,8 @@ var (
 	// errPacketMismatch reports Packet metadata that data cannot have
 	// produced.
 	errPacketMismatch = errors.New("opus: packet metadata does not match its data")
-	// errConcealDuration reports a concealment duration that is not a
-	// multiple of 2.5 ms from 2.5 to 120 ms (OPUS_BAD_ARG).
+	// errConcealDuration reports a lost duration for Conceal or DecodeFEC
+	// that is not a multiple of 2.5 ms from 2.5 to 120 ms (OPUS_BAD_ARG).
 	errConcealDuration = errors.New("opus: concealment duration must be a multiple of 120 samples from 120 to 5760")
 	// errRedundancy reports a frame whose CELT redundancy is longer than
 	// the frame, where opus_decode_frame's sanity check fires.
@@ -193,10 +193,13 @@ var silence = [2]byte{0xFF, 0xFF}
 
 // decodeFrame decodes one frame of the current packet into pcm, or conceals
 // up to frameSize samples when data holds at most one byte, and returns the
-// number of samples per channel written (opus_decode_frame with decode_fec
-// = 0). The packet's mode, bandwidth, frame size and coded channels are in
-// st (opus_decode_native sets them).
-func (st *Decoder) decodeFrame(data []byte, pcm []float32, frameSize int) (int, error) {
+// number of samples per channel written (opus_decode_frame). The packet's
+// mode, bandwidth, frame size and coded channels are in st
+// (opus_decode_native sets them). With decodeFEC set (decode_fec), data is
+// the first frame of the packet after a loss: SILK decodes the in-band FEC
+// (LBRR) copy of the lost frame from it, the CELT layer of a hybrid frame
+// is concealed, and the frame's own redundancy is not read.
+func (st *Decoder) decodeFrame(data []byte, pcm []float32, frameSize int, decodeFEC bool) (int, error) {
 	var (
 		pcmTransition   []float32
 		redundantAudio  []float32
@@ -256,7 +259,7 @@ func (st *Decoder) decodeFrame(data []byte, pcm []float32, frameSize int) (int, 
 		// (CELT), 10, or 20 (e.g. 12.5 or 30 ms).
 		if audiosize > f20 {
 			for audiosize > 0 {
-				ret, err := st.decodeFrame(nil, pcm, min(audiosize, f20))
+				ret, err := st.decodeFrame(nil, pcm, min(audiosize, f20), false)
 				if err != nil {
 					return 0, err
 				}
@@ -283,7 +286,7 @@ func (st *Decoder) decodeFrame(data []byte, pcm []float32, frameSize int) (int, 
 	}
 	if transition && mode == ModeCELT {
 		pcmTransition = st.pcmTransition[:f5*channels]
-		_, _ = st.decodeFrame(nil, pcmTransition, min(f5, audiosize))
+		_, _ = st.decodeFrame(nil, pcmTransition, min(f5, audiosize), false)
 	}
 	if audiosize > frameSize {
 		return 0, errBadArg
@@ -321,8 +324,11 @@ func (st *Decoder) decodeFrame(data []byte, pcm []float32, frameSize int) (int, 
 		}
 
 		lostFlag := silk.FlagDecodeNormal
-		if data == nil {
+		switch {
+		case data == nil:
 			lostFlag = silk.FlagPacketLost
+		case decodeFEC:
+			lostFlag = silk.FlagDecodeLBRR
 		}
 		decodedSamples := 0
 		for {
@@ -346,7 +352,7 @@ func (st *Decoder) decodeFrame(data []byte, pcm []float32, frameSize int) (int, 
 	}
 
 	startBand := 0
-	if mode != ModeCELT && data != nil {
+	if !decodeFEC && mode != ModeCELT && data != nil {
 		hybrid := 0
 		if mode == ModeHybrid {
 			hybrid = 1
@@ -391,7 +397,7 @@ func (st *Decoder) decodeFrame(data []byte, pcm []float32, frameSize int) (int, 
 
 	if transition && mode != ModeCELT {
 		pcmTransition = st.pcmTransition[:f5*channels]
-		_, _ = st.decodeFrame(nil, pcmTransition, min(f5, audiosize))
+		_, _ = st.decodeFrame(nil, pcmTransition, min(f5, audiosize), false)
 	}
 
 	if bandwidth != bandwidthNone {
@@ -437,9 +443,9 @@ func (st *Decoder) decodeFrame(data []byte, pcm []float32, frameSize int) (int, 
 		if mode != st.prevMode && st.prevMode != modeNone && !st.prevRedundancy {
 			st.celtDec.Reset()
 		}
-		// Decode CELT.
+		// Decode CELT; with FEC its layer is concealed.
 		var celtData []byte
-		if data != nil {
+		if data != nil && !decodeFEC {
 			celtData = data[:length]
 		}
 		_, celtErr = st.celtDec.DecodeWithEC(celtData, pcm, celtFrameSize, dec)
@@ -572,18 +578,12 @@ func (st *Decoder) decodeNative(packet Packet, data []byte, pcm []float32, frame
 
 	// Update the state as the last step to avoid updating it on an invalid
 	// packet.
-	st.mode = packetMode
-	st.bandwidth = tocBandwidth(toc)
-	st.frameSize = tocSamplesPerFrame(toc)
-	st.streamChannels = 1
-	if toc&0x4 != 0 {
-		st.streamChannels = 2
-	}
+	st.setPacketConfig(toc)
 
 	nbSamples := 0
 	for i := 0; i < count; i++ {
 		frame := data[packet.FrameOffset[i] : packet.FrameOffset[i]+packet.FrameSize[i]]
-		ret, err := st.decodeFrame(frame, pcm[nbSamples*st.channels:], frameSize-nbSamples)
+		ret, err := st.decodeFrame(frame, pcm[nbSamples*st.channels:], frameSize-nbSamples, false)
 		if err != nil {
 			if packetMode == ModeHybrid {
 				st.restoreState(count > 1)
@@ -596,6 +596,19 @@ func (st *Decoder) decodeNative(packet Packet, data []byte, pcm []float32, frame
 	// opus_decode_float passes soft_clip = 0, which only clears
 	// softclip_mem.
 	return nbSamples, nil
+}
+
+// setPacketConfig takes the mode, bandwidth, frame size and coded channels
+// of the packet whose TOC byte is toc, as opus_decode_native does before it
+// decodes the packet's frames.
+func (st *Decoder) setPacketConfig(toc byte) {
+	st.mode = tocMode(toc)
+	st.bandwidth = tocBandwidth(toc)
+	st.frameSize = tocSamplesPerFrame(toc)
+	st.streamChannels = 1
+	if toc&0x4 != 0 {
+		st.streamChannels = 2
+	}
 }
 
 // saveState saves what a packet can change before DecodeParsed rejects
@@ -647,22 +660,74 @@ func (p *Packet) describes(data []byte) bool {
 
 // Conceal advances a lost interval using the last decoded mode and bandwidth.
 // samples is a per-channel 48 kHz count, from 120 to MaxPacketSamples in
-// multiples of 120 (2.5 ms). With no history it returns silence. It does not
-// recover FEC; callers provide the missing duration. Reset clears this
+// multiples of 120 (2.5 ms). With no history it returns silence. Callers
+// provide the missing duration; DecodeFEC recovers the end of the interval
+// from the in-band FEC of the packet after it instead. Reset clears this
 // history.
 //
 // It is opus_decode_float(st, NULL, 0, out, samples, 0).
 func (st *Decoder) Conceal(samples int, out []float32) (int, error) {
-	// For PLC, frame_size has to be a multiple of 2.5 ms.
+	if err := st.checkLost(samples, out); err != nil {
+		return 0, err
+	}
+	return st.conceal(samples, out)
+}
+
+// DecodeFEC decodes a lost interval of samples per channel that ends where
+// next begins, using the in-band FEC (LBRR) data that next, the first packet
+// received after the loss, carries for the audio before it. samples is a
+// per-channel 48 kHz count, from 120 to MaxPacketSamples in multiples of 120
+// (2.5 ms), as for Conceal, and out must hold samples*Channels() values. It
+// returns samples; decode next itself afterwards with Decode.
+//
+// When next is a SILK or hybrid packet, the last packet decoded was not
+// CELT-only and samples is at least next's frame duration, DecodeFEC
+// conceals all but the last frame duration of the interval and decodes that
+// last part from the LBRR data of next's first frame, taking next's mode,
+// bandwidth, frame duration and coded channels: the SILK decoder conceals
+// the SILK frames that have no LBRR data, and the CELT layer of a hybrid
+// packet is concealed. Otherwise it conceals the whole interval exactly as
+// Conceal does. It does not check HasLBRR: when next carries no LBRR data the
+// interval is still concealed, but at next's configuration, which can differ
+// from Conceal. Callers that want FEC only where it exists, as the puropus
+// Decoder does, call HasLBRR first and Conceal when it is false.
+//
+// FinalRange afterwards is the range of the LBRR decode, or 0 when the
+// interval was only concealed. A next that does not parse (an empty one
+// included) makes DecodeFEC return Parse's error and leaves the decoder as
+// it was, so the caller can conceal the interval with Conceal instead.
+//
+// It is opus_decode_float(st, next, len(next), out, samples, 1).
+func (st *Decoder) DecodeFEC(next []byte, samples int, out []float32) (int, error) {
+	if err := st.checkLost(samples, out); err != nil {
+		return 0, err
+	}
+	packet, err := Parse(next, false)
+	if err != nil {
+		return 0, err
+	}
+	return st.decodeFEC(packet, next, out, samples)
+}
+
+// checkLost validates the duration and the output buffer of a lost
+// interval for Conceal and DecodeFEC.
+func (st *Decoder) checkLost(samples int, out []float32) error {
+	// For FEC/PLC, frame_size has to be a multiple of 2.5 ms.
 	if samples < f2p5 || samples > MaxPacketSamples || samples%f2p5 != 0 {
-		return 0, errConcealDuration
+		return errConcealDuration
 	}
 	if len(out) < samples*st.channels {
-		return 0, errBufferTooSmall
+		return errBufferTooSmall
 	}
+	return nil
+}
+
+// conceal is opus_decode_native without a packet: loss concealment of
+// frameSize samples per channel, in the steps opus_decode_frame takes.
+func (st *Decoder) conceal(frameSize int, pcm []float32) (int, error) {
 	pcmCount := 0
-	for pcmCount < samples {
-		ret, err := st.decodeFrame(nil, out[pcmCount*st.channels:], samples-pcmCount)
+	for pcmCount < frameSize {
+		ret, err := st.decodeFrame(nil, pcm[pcmCount*st.channels:], frameSize-pcmCount, false)
 		if err != nil {
 			return 0, err
 		}
@@ -670,6 +735,36 @@ func (st *Decoder) Conceal(samples int, out []float32) (int, error) {
 	}
 	st.lastPacketDuration = pcmCount
 	return pcmCount, nil
+}
+
+// decodeFEC decodes a lost interval from the packet after it, which
+// DecodeFEC parsed (opus_decode_native with decode_fec = 1).
+func (st *Decoder) decodeFEC(packet Packet, data []byte, pcm []float32, frameSize int) (int, error) {
+	toc := data[0]
+	packetMode := tocMode(toc)
+	packetFrameSize := tocSamplesPerFrame(toc)
+
+	// If no FEC can be present, run the PLC (recursive call).
+	if frameSize < packetFrameSize || packetMode == ModeCELT || st.mode == ModeCELT {
+		return st.conceal(frameSize, pcm)
+	}
+	// Otherwise, run the PLC on everything except the size for which we
+	// might have FEC.
+	durationCopy := st.lastPacketDuration
+	if frameSize-packetFrameSize != 0 {
+		if _, err := st.conceal(frameSize-packetFrameSize, pcm); err != nil {
+			st.lastPacketDuration = durationCopy
+			return 0, err
+		}
+	}
+	// Complete with FEC.
+	st.setPacketConfig(toc)
+	frame := data[packet.FrameOffset[0] : packet.FrameOffset[0]+packet.FrameSize[0]]
+	if _, err := st.decodeFrame(frame, pcm[st.channels*(frameSize-packetFrameSize):], packetFrameSize, true); err != nil {
+		return 0, err
+	}
+	st.lastPacketDuration = frameSize
+	return frameSize, nil
 }
 
 // FinalRange returns the final entropy range of the last successfully decoded

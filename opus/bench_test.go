@@ -155,9 +155,9 @@ func decodeStreams(tb testing.TB) []packetStream {
 	}
 }
 
-// TestDecodeDoesNotAllocate requires decoding and concealment to allocate
-// nothing per packet once the decoder exists, in every mode, for multi-frame
-// packets and mode transitions, mono and stereo.
+// TestDecodeDoesNotAllocate requires decoding, concealment and FEC decoding
+// to allocate nothing per packet once the decoder exists, in every mode, for
+// multi-frame packets and mode transitions, mono and stereo.
 func TestDecodeDoesNotAllocate(t *testing.T) {
 	for _, s := range decodeStreams(t) {
 		d, err := NewDecoder(s.channels)
@@ -182,6 +182,15 @@ func TestDecodeDoesNotAllocate(t *testing.T) {
 		})
 		if allocs != 0 {
 			t.Errorf("%s: %v allocations per concealment", s.name, allocs)
+		}
+		allocs = testing.AllocsPerRun(20, func() {
+			if _, err := d.DecodeFEC(s.packets[i%len(s.packets)], MaxPacketSamples, out); err != nil {
+				t.Fatal(err)
+			}
+			i++
+		})
+		if allocs != 0 {
+			t.Errorf("%s: %v allocations per FEC decode", s.name, allocs)
 		}
 	}
 }
