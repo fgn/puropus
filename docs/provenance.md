@@ -12,8 +12,8 @@ consists of:
 - the range decoder, CELT and SILK: `opus/internal/entcode`,
   `opus/internal/celt` and `opus/internal/silk`;
 - the decoder logic in package `opus`: packet parsing, frame decoding with
-  its mode transitions and redundancy, LBRR detection and the conversion of
-  SILK output to float (`decoder.go`, `packet.go`, `lbrr.go`, and
+  its mode transitions and redundancy, loss concealment and in-band FEC
+  decoding, LBRR detection and the conversion of SILK output to float (`decoder.go`, `packet.go`, `lbrr.go`, and
   `silk_pcm.go` with its vector kernel).
 
 The vector kernels in these packages are vector forms of the same libopus

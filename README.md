@@ -50,7 +50,7 @@ Everything else runs the portable scalar code.
 ```go
 dec, err := puropus.NewDecoder(r, puropus.DecodeOptions{
     SampleRate: 16000, // 0 or 48000 for native; 16000 uses the built-in resampler
-    Tolerant:   true,  // conceal undecodable packets instead of stopping
+    Tolerant:   true,  // recover undecodable packets instead of stopping
 })
 if err != nil { ... }
 
@@ -72,6 +72,13 @@ and the header output gain are all applied. The 16 kHz output matches FFmpeg's
 default resampler. A corrupt Ogg page is dropped and costs only the Opus
 packets it carries, so a corrupt page of another grouped stream costs none,
 and a chained link whose last page is lost ends where the next one begins.
+
+With `Tolerant`, a packet that parses but cannot be decoded does not stop the
+stream. Its audio is recovered from the in-band FEC of the next packet when
+that packet carries some, exactly as a libopus application recovers a lost
+packet (`opus_decode_float` with `decode_fec = 1`, then the next packet), and
+concealed otherwise; its audio is returned once the next packet has been
+read. Packets that do not even parse are skipped.
 
 ## Cut
 
@@ -155,6 +162,16 @@ before the first audio packet. Mode changes without redundancy crossfade with
 concealed audio as in libopus. A packet that `Decode` rejects leaves the
 decoder exactly as it was, so `Conceal` can stand in for it.
 
+`Decoder.DecodeFEC(next, samples, out)` fills the same interval from the
+packet that follows it: SILK and hybrid packets can carry a low-bitrate copy
+of the audio just before them (in-band FEC, LBRR), which `opus.HasLBRR`
+detects. It is `opus_decode_float` with `decode_fec = 1`: it conceals all
+but the last frame duration of the interval and decodes that part from
+`next`'s LBRR data, or conceals all of it where libopus would (a CELT packet
+on either side, or an interval shorter than `next`'s frames). Then decode
+`next` itself as usual. A `next` that does not parse is rejected without
+touching the decoder, so `Conceal` can take over.
+
 ## Performance
 
 Decode speed in times real time on one i9-14900HX core (pinned, Go 1.27.0,
@@ -199,17 +216,22 @@ what to watch for when writing Go SIMD code.
 `go test ./...` runs offline, in a clone, against references committed to
 this repository (the module `go get` downloads leaves them out, and its tests
 skip): Ogg and WebM fixtures covering every SILK and hybrid
-configuration and CELT in 10 to 60 ms packets, and 28 libopus sequences with
+configuration and CELT in 10 to 60 ms packets, 28 libopus sequences with
 packet loss, DTX, FEC skipping, and mode, bandwidth and channel transitions,
-the 15 stereo ones decoded to mono and to stereo.
+the 15 stereo ones decoded to mono and to stereo, and packet-by-packet
+libopus decode logs of the SILK and hybrid fixtures and of 30 cases of loss
+recovered with in-band FEC (single losses, bursts, the first and last
+packet, and losses across mode, bandwidth, frame size and channel switches).
 
 - **libopus, bit for bit.** The codec follows libopus 1.5.2's float decoder
   as compiled from its generic C code, and on amd64 (and 386) its 48 kHz
   output is that build's bit for bit, in the scalar and the SIMD build. The
-  tests require it of the SILK-only streams sample by sample and of the
-  CELT-only streams frame by frame, by hash. On all 28 sequences, hybrid
-  included, they gate every frame at RMS 1e-6 and peak 1e-4 and log the
-  bit-identical samples, which are all of them.
+  tests require it of the SILK-only streams sample by sample, of the
+  CELT-only streams frame by frame, and of the hybrid fixtures and every FEC
+  case packet by packet, by hash, the `Tolerant` decoder's FEC recovery
+  included. On all 28 sequences, hybrid included, they gate every frame at
+  RMS 1e-6 and peak 1e-4 and log the bit-identical samples, which are all of
+  them.
 - **Stock libopus.** A second gate compares with libopus as most programs
   build it, with its x86 SIMD kernels, at the same limits, except for CELT
   pitch concealment and the frames recovering from it, which allow RMS 3e-4
@@ -217,8 +239,8 @@ the 15 stereo ones decoded to mono and to stereo.
   2.6e-4 and peak 4.8e-4, on the longest loss run.
 - **Final range.** Sample counts are exact everywhere, and the range
   coder's final state must equal libopus's after every packet of the
-  sequences and the RFC vectors, and of the SILK and CELT fixtures but for
-  eight SILK packets that carry a CELT redundancy frame.
+  sequences, the RFC vectors and the fixtures, the SILK packets that carry a
+  CELT redundancy frame included, and after every FEC decode.
 - **16 kHz.** The 16 kHz output is gated against FFmpeg's default
   resampler run on libopus's 48 kHz decode: exact sample counts, RMS 1e-6
   and peak 1e-4, with a worst case of RMS 2.0e-8 and peak 2.4e-7. The
@@ -245,8 +267,9 @@ in more detail.
 
 ## Limitations
 
-- No recovery from in-band FEC after packet loss: the decoder parses the FEC
-  (LBRR) data and skips it, and conceals a lost packet instead.
+- Loss is recovered only for packets that are present: a WebM block or Ogg
+  page missing from the input (a dropped corrupt page included) leaves no
+  gap to conceal, and the timeline continues with the next packet.
 - No encoder. See `SnapExact` above.
 - No laced WebM blocks, and no channel mapping families other than 0 (so at
   most two channels).

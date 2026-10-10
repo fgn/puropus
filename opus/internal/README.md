@@ -81,8 +81,9 @@ documentation.
   `silk_Decode(st, control, lostFlag, newPacketFlag, dec, pcm, &nSamplesOut)`
   with the `silk_DecControlStruct` fields `nChannelsAPI`,
   `nChannelsInternal`, `API_sampleRate` (48000), `internalSampleRate` and
-  `payloadSize_ms`; `lostFlag` is `FLAG_DECODE_NORMAL` or `FLAG_PACKET_LOST`
-  (FEC is parsed and skipped, never decoded).
+  `payloadSize_ms`; `lostFlag` is `FLAG_DECODE_NORMAL` (which parses and
+  skips the in-band FEC), `FLAG_PACKET_LOST`, or `FLAG_DECODE_LBRR` for
+  `DecodeFEC` (`opus_decode_frame` with `decode_fec`).
 - **both, not in libopus**: `SaveState` and `RestoreState`, plain copies of
   the state that carries over between calls (no scratch memory), with which
   `DecodeParsed` undoes a hybrid packet it rejects at `opus_decode_frame`'s

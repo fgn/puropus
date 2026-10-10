@@ -6,7 +6,8 @@
 puropus              Decoder (container → PCM), Source, Cut, Stream, writers
 ├── cmd/puropus      command line: inspect, decode, cut
 ├── opus             packet decoder (RFC 6716): TOC parsing, frame decoding and
-│   │                mode transitions, OpusHead, LBRR detection, silence packets
+│   │                mode transitions, loss concealment and in-band FEC,
+│   │                OpusHead, LBRR detection, silence packets
 │   └── internal
 │       ├── entcode  range decoder
 │       ├── celt     CELT decoder, with loss concealment
@@ -79,6 +80,21 @@ CELT with pitch-based concealment that turns to noise after 100 ms of loss
 Before any packet it returns zeros. Packets of zero or one byte per frame
 (DTX) conceal the same way.
 
+**In-band FEC.** A SILK or hybrid packet can carry LBRR frames, a
+low-bitrate copy of the audio just before it (RFC 6716 §4.2.5). Decoding
+parses and skips them. `DecodeFEC(next, samples, out)` is `opus_decode_float`
+with `decode_fec = 1`, ported from `opus_decode_native` and
+`opus_decode_frame`: when `next` is SILK or hybrid, the last decoded packet
+was not CELT-only and the lost interval is at least `next`'s frame duration,
+it conceals all but that last part as `Conceal` does, takes `next`'s mode,
+bandwidth, frame size and coded channels, and decodes the part from `next`'s
+first frame with SILK's LBRR path (`silk_Decode` with `FLAG_DECODE_LBRR`,
+which conceals the SILK frames that carry no LBRR data); the CELT layer of a
+hybrid frame is concealed, and no redundancy is read. Otherwise it conceals
+the whole interval, exactly as `Conceal`. The final range is the range
+decoder's after the LBRR data, or 0. Like `opus_decode_native`, it rejects a
+`next` that does not parse before it changes anything.
+
 **Output.** The root `Decoder` drops the pre-skip from the start, the end
 trimming from the last packet, applies the header output gain, and resamples
 each channel to 16 kHz when asked to. `Position` counts what `Read` has
@@ -126,9 +142,25 @@ though not n9.0.2, stops at a chained link without OpusTags.
 
 A packet that cannot be parsed stops decoding, or is skipped in `Tolerant`
 mode. One that parses but cannot be decoded stops decoding too, or in
-`Tolerant` mode is concealed for its duration, which the TOC gives. Input
-that ends inside a page or element yields everything decodable, the
-resampler's tail included, and then `ErrTruncated`.
+`Tolerant` mode is lost for its duration, which the TOC gives. The decoder
+then reads the next packet, waiting for it as `Read` does, and keeps it to
+decode next. When that packet belongs to the same Ogg link and `HasLBRR`
+reports in-band FEC in it, the lost packet is decoded with `DecodeFEC` from
+it, as a libopus application recovers a lost packet (`opus_decode_float`
+with `decode_fec = 1` for the lost duration, then the next packet with
+`decode_fec = 0`); libopus itself may still conceal, as described above.
+Otherwise, also at the end of the input and before an error, which the next
+`Read` reports, the packet is concealed. Only the audio of the lost packet
+waits for the next packet; positions, trimming and retained packets are
+those of the stream. Input that ends inside a page or element yields
+everything decodable, the resampler's tail included, and then
+`ErrTruncated`.
+
+The containers' own timestamps are not used to find lost packets: a WebM
+block or an Ogg page that is missing altogether (rather than present and
+undecodable) leaves no gap in the decoded timeline, which simply continues
+with the next packet, so neither concealment nor FEC applies to it. A page
+the Ogg reader drops for a bad checksum is such a gap.
 
 The WebM writer produces the single-track, unknown-size-Segment, 1 ms
 timestamp profile that browsers emit, splitting clusters before a relative
@@ -140,8 +172,8 @@ of the packets, so identical streams write identical bytes.
 
 `opus.NewDecoder` allocates all codec state at once: the SILK and CELT
 decoders are values inside `opus.Decoder`, and their scratch memory is
-arrays in them, not locals that escape. Decoding and concealment allocate
-nothing per packet, in every mode, for multi-frame packets and mode switches,
+arrays in them, not locals that escape. Decoding, concealment and FEC
+decoding allocate nothing per packet, in every mode, for multi-frame packets and mode switches,
 mono and stereo (`TestDecodeDoesNotAllocate` in `opus` and `celt`,
 `TestDecodeAllocs` in `silk`). CELT's tables are built once, at the first
 decoder's initialization. The resampler grows its buffer to the largest
@@ -165,7 +197,8 @@ frame itself. libopus catches that case with a sanity check in
 `opus_decode_frame` ("it should never happen for a valid packet"), drops the
 redundancy and goes on. puropus rejects the packet instead, so that a caller
 can conceal it like a lost one: in `Tolerant` mode the output is then the
-same as for the stream with that packet lost
+same as for the stream with that packet lost, recovered from the next
+packet's in-band FEC where it carries some
 (`TestStereoRejectedPacketPreservesRecovery`).
 
 That check fires only in hybrid frames, after SILK has decoded the frame
@@ -257,11 +290,10 @@ x86 SIMD kernels chosen at run time.
    also at the other output rates of `celt_decoder_init` and with start band
    17 as in hybrid frames. The SILK decoder matches libopus's final range
    after every packet and its output sample for sample, through loss,
-   comfort noise and in-band FEC (which package `silk` can decode, although
-   package `opus` never asks it to). Only the eight packets of the
+   comfort noise and in-band FEC. Only the eight packets of the
    bandwidth-switch fixture that carry a CELT redundancy frame, which
-   package `silk` cannot decode alone, are left out there; the root package
-   gates that fixture's waveform as a whole.
+   package `silk` cannot decode alone, are left out there; package `opus`
+   checks them (item 4).
 3. **Fixtures** (`testdata/`, provenance in `testdata/manifest.json`). Ogg and
    WebM streams cover every SILK and hybrid configuration and CELT in 10, 20,
    40 and 60 ms packets, with in-band FEC, a SILK/CELT mode switch and a SILK
@@ -276,7 +308,26 @@ x86 SIMD kernels chosen at run time.
    same fixtures drive the stream API through slow input, odd read sizes,
    output gain, chained links, packet retention, strict and tolerant errors,
    and Ogg and WebM cuts.
-4. **Loss and transitions** (`opus/testdata/transition-vectors`). Thirteen
+4. **Decode logs and FEC** (`opus/testdata/decode-logs`). The generic
+   build's record-by-record decode (kind, sample count, final range and PCM
+   hash) of 52 cases, which `opus` replays with `Decode`, `Conceal` and
+   `DecodeFEC` bit for bit, final ranges included: every SILK and hybrid
+   fixture and the SILK/CELT switch fixture without loss (the eight
+   redundancy packets above included), and 30 cases of loss on the FEC
+   fixtures, the channel switch sequences decoded to mono and stereo, the
+   mode switch and loss sequences, and a splice of fixtures that switches
+   between SILK NB, MB and WB, 20 and 60 ms frames, hybrid FB and CELT FB:
+   single losses, bursts, the first and the last packet, losses before
+   packets without LBRR data, before and after a CELT packet, before a
+   longer frame, before TOC-only and empty-frame packets, and across every
+   kind of switch. Lost packets are recovered with FEC as the `Tolerant`
+   decoder does it (when `HasLBRR`, 215 FEC decodes of which 195 decode LBRR
+   data) or whenever a packet follows, as `opus_demo` does. The root
+   package's `TestTolerantRecoversFromFEC` turns the losses of the `Tolerant`
+   cases into undecodable packets of Ogg and WebM streams and requires the
+   decoder's 48 kHz output to have libopus's hash, and the 16 kHz output to
+   be its resampling.
+5. **Loss and transitions** (`opus/testdata/transition-vectors`). Thirteen
    libopus sequences (732 packets and losses) cover single losses and loss
    runs at frame sizes from 2.5 to 60 ms, a run of twelve losses, DTX
    (TOC-only packets, zero-length frames, encoded DTX in quiet input),
@@ -291,13 +342,13 @@ x86 SIMD kernels chosen at run time.
    losses in a row), mostly from the summation order of the SSE
    `xcorr_kernel` in `celt_fir` and `celt_iir`; on every other frame they
    are within RMS 1.8e-8 and peak 1.2e-7 of each other.
-5. **Stereo** (`opus/testdata/stereo-vectors`). Fifteen libopus sequences,
+6. **Stereo** (`opus/testdata/stereo-vectors`). Fifteen libopus sequences,
    decoded to mono and to stereo, cover changes of the coded channel count
    with FEC, mode and bandwidth switches, losses of 2.5 to 60 ms frames,
    transients and DTX, with the same gates. A band-domain vector checks the
    order of CELT's anti-collapse noise across both channels, and Ogg and WebM
    tests compare 16 kHz stereo output with FFmpeg resampler goldens.
-6. **Official vectors.** With `OPUS_TEST_VECTORS` pointing at the RFC 8251
+7. **Official vectors.** With `OPUS_TEST_VECTORS` pointing at the RFC 8251
    corpus, `TestOfficialOpusVectors` checks the files' hashes, the final
    range of every packet, exact sample counts and finite output for all
    twelve streams, mono and stereo; together they cover all 32
@@ -308,13 +359,14 @@ x86 SIMD kernels chosen at run time.
    check, the official `opus_compare`, needs the C reference tools and runs
    outside the repository: all twelve vectors pass it, mono and stereo, in
    both builds.
-7. **Malformed input.** Fuzz targets cover both container readers, the
-   packet parser and the Opus, CELT and SILK decoders, and truncated or
-   corrupt containers have explicit tests.
+8. **Malformed input.** Fuzz targets cover both container readers, the
+   packet parser and the Opus (packets and FEC decoding), CELT and SILK
+   decoders, and truncated or corrupt containers have explicit tests.
 
 The SIMD build is held to the same tests, plus each kernel against the
 scalar code it replaces; [simd.md](simd.md) describes them. On other
 architectures than amd64 and 386, whose floating-point results (fused
 multiply-adds, the math library) need not round as on x86 with glibc, the
-CELT frame hashes are reported rather than required; the PCM gates still
-apply.
+CELT frame hashes and the decode logs' PCM hashes are reported rather than
+required, except for the cases whose PCM is integer SILK output; the PCM
+gates still apply.

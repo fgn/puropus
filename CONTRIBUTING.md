@@ -50,7 +50,7 @@ does:
   reference. They need a C compiler and make, the libopus 1.5.2 source tree
   in `OPUS_SRC` and a CMake Release build of it in `OPUS_BUILD` (the
   [README](tools/libopus-ref/README.md) says how to get and build them),
-  and go, jq, xxd, gzip, cmp and sha256sum for the scripts. The 16 kHz
+  and go, jq, xxd, awk, gzip, cmp and sha256sum for the scripts. The 16 kHz
   goldens also need an `ffmpeg` binary (`FFMPEG`, default `ffmpeg` on
   `PATH`); the committed ones were made with FFmpeg n9.0.2. `task refs`
   builds the tools.
