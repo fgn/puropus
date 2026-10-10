@@ -596,3 +596,34 @@ func assertEncoded(t *testing.T, enc *recordingEncoder, direct []float32, ranges
 		}
 	}
 }
+
+// Cut rejects the settings of an Edit that have no meaning instead of giving
+// them an accidental one: a negative Guard used to copy packets far outside
+// an exact interval (1.2 s for [100, 200) ms with a guard of -1 s), and a
+// negative margin shrank the intervals. Unsorted and overlapping intervals
+// are not errors: they are sorted and merged.
+func TestCutRejectsMeaninglessEdits(t *testing.T) {
+	data := readFixture(t, "webm-celt-60ms.webm")
+	_, dec := decodeAll(t, bytes.NewReader(data), DecodeOptions{KeepNative: true})
+	src := dec.Source()
+	interval := []Interval{{100 * ms, 200 * ms}}
+	for name, edit := range map[string]Edit{
+		"negative guard":         {Keep: interval, Snap: SnapExact, Guard: -time.Second, Encoder: silenceEncoder{}},
+		"negative guard, inward": {Keep: interval, Snap: SnapInward, Guard: -ms},
+		"negative margin before": {Keep: interval, Extend: Margin{Before: -10 * ms}},
+		"negative margin after":  {Keep: interval, Extend: Margin{After: -10 * ms}},
+		"negative silence":       {Keep: interval, Silence: Silence{Leading: -2500 * time.Microsecond}},
+		"off-grid silence":       {Keep: interval, Silence: Silence{Trailing: time.Millisecond}},
+		"empty interval":         {Keep: []Interval{{100 * ms, 100 * ms}}},
+		"reversed interval":      {Keep: []Interval{{200 * ms, 100 * ms}}},
+		"unknown snap mode":      {Keep: interval, Snap: -1},
+	} {
+		if out, err := Cut(src, edit); err == nil {
+			t.Fatalf("%s: accepted, %v of output", name, out.Duration())
+		}
+	}
+	exact, err := Cut(src, Edit{Keep: interval, Snap: SnapExact, Encoder: silenceEncoder{}})
+	if err != nil || exact.Duration() != 100*ms {
+		t.Fatalf("exact [100, 200) ms: %v, %v", exact.Duration(), err)
+	}
+}

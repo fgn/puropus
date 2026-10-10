@@ -31,14 +31,14 @@ const (
 
 // Margin extends every kept interval with real audio on each side before
 // packets are selected. Intervals that touch or overlap after extension are
-// merged.
+// merged. Both durations must not be negative.
 type Margin struct {
 	Before time.Duration
 	After  time.Duration
 }
 
 // Silence inserts synthesized digital silence around and between kept
-// regions. Durations must be multiples of 2.5 ms.
+// regions. Durations must be non-negative multiples of 2.5 ms.
 type Silence struct {
 	Leading  time.Duration
 	Between  time.Duration
@@ -61,7 +61,9 @@ type Encoder interface {
 
 // Edit describes a cut.
 type Edit struct {
-	// Keep lists the intervals to retain, in output time of the source.
+	// Keep lists the intervals to retain on the source's timeline. Each must
+	// be non-empty (End after Start); they may come in any order, and those
+	// that overlap or touch are merged.
 	Keep []Interval
 	// Extend widens each interval with context before selection.
 	Extend Margin
@@ -69,7 +71,8 @@ type Edit struct {
 	// value is SnapOutward.
 	Snap Snap
 	// Guard is the least amount of audio SnapExact re-encodes at each
-	// boundary before copying interior packets; zero selects 80 ms.
+	// boundary before copying interior packets; zero selects 80 ms, and it
+	// must not be negative.
 	Guard time.Duration
 	// Silence inserts synthesized silence before, between, and after regions.
 	Silence Silence
@@ -147,14 +150,11 @@ type region struct {
 // copied packet by packet without decoding; only SnapExact re-encodes, and
 // only the guard regions.
 func Cut(src Source, edit Edit) (*Stream, error) {
+	if err := validateEdit(edit); err != nil {
+		return nil, err
+	}
 	if len(src.Packets) == 0 {
 		return nil, fmt.Errorf("puropus: source has no packets")
-	}
-	if edit.Snap < SnapOutward || edit.Snap > SnapExact {
-		return nil, fmt.Errorf("puropus: unknown snap mode %d", edit.Snap)
-	}
-	if err := validateSilence(edit.Silence); err != nil {
-		return nil, err
 	}
 	window := region{src.Packets[0].Start, src.Packets[len(src.Packets)-1].End()}
 	if edit.Snap == SnapExact {
@@ -165,10 +165,7 @@ func Cut(src Source, edit Edit) (*Stream, error) {
 			return nil, ErrNativeRequired
 		}
 	}
-	regions, err := resolveRegions(edit, window)
-	if err != nil {
-		return nil, err
-	}
+	regions := resolveRegions(edit, window)
 
 	b := &builder{src: src, edit: edit, window: window, channels: src.Header.Channels}
 	kept := 0
@@ -176,6 +173,7 @@ func Cut(src Source, edit Edit) (*Stream, error) {
 	for _, reg := range regions {
 		var packets []Packet
 		if edit.Snap == SnapExact {
+			var err error
 			packets, err = b.exactRegion(reg)
 			if err != nil {
 				return nil, err
@@ -211,22 +209,36 @@ func Cut(src Source, edit Edit) (*Stream, error) {
 	return out, nil
 }
 
-func validateSilence(s Silence) error {
-	for _, d := range []time.Duration{s.Leading, s.Between, s.Trailing} {
+// validateEdit rejects the settings of an Edit that have no meaning, rather
+// than giving them an accidental one: a negative Guard would copy packets
+// far outside an interval, a negative margin would shrink it.
+func validateEdit(edit Edit) error {
+	if edit.Snap < SnapOutward || edit.Snap > SnapExact {
+		return fmt.Errorf("puropus: unknown snap mode %d", edit.Snap)
+	}
+	if edit.Guard < 0 {
+		return fmt.Errorf("puropus: negative guard %v", edit.Guard)
+	}
+	if edit.Extend.Before < 0 || edit.Extend.After < 0 {
+		return fmt.Errorf("puropus: negative margin %+v", edit.Extend)
+	}
+	for _, d := range []time.Duration{edit.Silence.Leading, edit.Silence.Between, edit.Silence.Trailing} {
 		if d < 0 || d%(2500*time.Microsecond) != 0 {
-			return fmt.Errorf("puropus: silence %v is not a multiple of 2.5 ms", d)
+			return fmt.Errorf("puropus: silence %v is not a non-negative multiple of 2.5 ms", d)
+		}
+	}
+	for i, iv := range edit.Keep {
+		if iv.End <= iv.Start {
+			return fmt.Errorf("puropus: interval %d [%v, %v) is empty", i, iv.Start, iv.End)
 		}
 	}
 	return nil
 }
 
 // resolveRegions converts, extends, clamps, sorts, and merges the intervals.
-func resolveRegions(edit Edit, window region) ([]region, error) {
+func resolveRegions(edit Edit, window region) []region {
 	regions := make([]region, 0, len(edit.Keep))
-	for i, iv := range edit.Keep {
-		if iv.End <= iv.Start {
-			return nil, fmt.Errorf("puropus: interval %d [%v, %v) is empty", i, iv.Start, iv.End)
-		}
+	for _, iv := range edit.Keep {
 		start := max(durationToSamples(addSaturating(iv.Start, -edit.Extend.Before)), window.start)
 		end := min(durationToSamples(addSaturating(iv.End, edit.Extend.After)), window.end)
 		if end <= start {
@@ -243,7 +255,7 @@ func resolveRegions(edit Edit, window region) ([]region, error) {
 		}
 		merged = append(merged, r)
 	}
-	return merged, nil
+	return merged
 }
 
 // addSaturating returns a+b, clamped to the range of time.Duration.
