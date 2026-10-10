@@ -33,9 +33,10 @@ func gapStreams(t *testing.T) []gapStream {
 	for _, c := range tolerantFECCases(t) {
 		if c.Source.Vector == "stereo-vectors/channels-silk-fec" && c.Channels == 2 {
 			// Four times over, for Ogg pages enough to lose one inside.
-			var packets [][]byte
+			once := decodeLogStream(t, c).Packets
+			packets := make([][]byte, 0, 4*len(once))
 			for range 4 {
-				for _, p := range decodeLogStream(t, c).Packets {
+				for _, p := range once {
 					packets = append(packets, p.Data)
 				}
 			}
