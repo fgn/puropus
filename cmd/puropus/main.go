@@ -147,7 +147,7 @@ func inspect(args []string) error {
 func decode(args []string) (err error) {
 	fs := flag.NewFlagSet("decode", flag.ExitOnError)
 	rate := fs.Int("rate", 48000, "output sample rate: 48000 or 16000")
-	tolerant := fs.Bool("tolerant", false, "conceal undecodable packets instead of failing")
+	tolerant := fs.Bool("tolerant", false, "recover undecodable packets from the next packet's in-band FEC, or conceal them, instead of failing")
 	output := fs.String("o", "-", "output file (f32le), - for stdout")
 	if err := fs.Parse(args); err != nil {
 		return err

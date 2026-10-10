@@ -20,9 +20,14 @@ type DecodeOptions struct {
 	// SampleRate selects the output rate: 0 or 48000 for native output, or
 	// 16000 for the built-in resampler.
 	SampleRate int
-	// Tolerant conceals undecodable packets with a known duration, preserving
-	// codec history for recovery. Unparseable packets are skipped. Corrupt
-	// Ogg pages are always dropped, regardless of this setting.
+	// Tolerant decodes past packets that parse but do not decode, instead of
+	// failing on them. Such a packet's duration is known, and its audio is
+	// recovered from the in-band FEC (LBRR) data of the next packet when that
+	// packet carries some, as libopus applications do on a loss, and
+	// concealed otherwise; codec history is kept for what follows. The next
+	// packet is read before the lost packet's audio is returned.
+	// Unparseable packets are skipped. Corrupt Ogg pages are always dropped,
+	// regardless of this setting.
 	Tolerant bool
 	// KeepPackets retains every packet so Source can hand them to Cut.
 	KeepPackets bool
@@ -60,8 +65,19 @@ type Decoder struct {
 	nativeBlocks [][]float32
 	nativeCache  []float32
 	nativeStart  int64 // timeline position of the first retained native sample
-	done         bool
-	err          error
+	// ahead is the packet after an undecodable one, read in Tolerant mode
+	// for its in-band FEC; fill decodes it next.
+	ahead lookahead
+	done  bool
+	err   error
+}
+
+// lookahead is a result of packetSource.next read ahead of its turn.
+type lookahead struct {
+	data []byte
+	meta packetMeta
+	err  error
+	ok   bool
 }
 
 // nativeBlockSamples is one second of 48 kHz audio per channel.
@@ -270,7 +286,7 @@ func (d *Decoder) fill() error {
 	if d.done {
 		return io.EOF
 	}
-	data, meta, err := d.src.next()
+	data, meta, err := d.nextPacket()
 	if err != nil {
 		if errors.Is(err, io.ErrUnexpectedEOF) {
 			err = fmt.Errorf("%w: %w", ErrTruncated, err)
@@ -298,13 +314,42 @@ func (d *Decoder) fill() error {
 		if perr != nil {
 			return nil //nolint:nilerr // an unparseable packet has no duration to conceal and is skipped
 		}
-		samples, err = d.codec.Conceal(parsed.Duration48(), d.buf48)
+		samples, err = d.recoverLost(parsed.Duration48())
 		if err != nil {
 			return d.finishInput(err)
 		}
 	}
 	d.finishPacket(data, meta, d.buf48[:samples*d.channels])
 	return nil
+}
+
+// nextPacket returns the packet recoverLost read ahead, if there is one,
+// and otherwise the source's next packet.
+func (d *Decoder) nextPacket() ([]byte, packetMeta, error) {
+	if d.ahead.ok {
+		a := d.ahead
+		d.ahead = lookahead{}
+		return a.data, a.meta, a.err
+	}
+	return d.src.next()
+}
+
+// recoverLost produces the samples of a packet that parsed but did not
+// decode, in Tolerant mode. It reads the next packet, waiting for it as
+// Read does, and keeps it for fill to decode next. When that packet belongs
+// to the same link and carries in-band FEC data, the lost packet's samples
+// are decoded from it, as a libopus application does on a loss
+// (opus_decode_float with decode_fec = 1 for the lost duration, before the
+// next packet itself); otherwise, and at the end of the input or on an
+// error the next fill reports, they are concealed. Without KeepPackets the
+// read reuses the lost packet's data buffer, which nothing reads again.
+func (d *Decoder) recoverLost(samples int) (int, error) {
+	data, meta, err := d.src.next()
+	d.ahead = lookahead{data: data, meta: meta, err: err, ok: true}
+	if err == nil && !meta.newLink && opus.HasLBRR(data) {
+		return d.codec.DecodeFEC(data, samples, d.buf48)
+	}
+	return d.codec.Conceal(samples, d.buf48)
 }
 
 // finishInput ends decoding with err. The resampler may still hold samples

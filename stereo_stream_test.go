@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/fgn/puropus/opus"
 )
 
 // stereoPreSkip and stereoTrim are the samples per channel trimmed from the
@@ -164,6 +166,10 @@ func TestStereoContainerStreaming(t *testing.T) {
 	}
 }
 
+// A rejected stereo packet is concealed as a signalled loss is, or, when the
+// next packet carries in-band FEC (channels-silk-fec and channels-hybrid-fec
+// at packet 11), decoded from it, and the stream recovers as libopus does
+// after that.
 func TestStereoRejectedPacketPreservesRecovery(t *testing.T) {
 	for _, name := range []string{"channels-silk-fec", "channels-hybrid-fec", "channels-celt"} {
 		for _, rate := range []int{48000, 16000} {
@@ -175,6 +181,11 @@ func TestStereoRejectedPacketPreservesRecovery(t *testing.T) {
 				if err := stream.Write(&corrupt, FormatWebM); err != nil {
 					t.Fatal(err)
 				}
+				rejected := &Stream{Header: stream.Header, Packets: slices.Clone(stream.Packets)}
+				fec := opus.HasLBRR(stream.Packets[11].Data)
+				if fec != (name != "channels-celt") {
+					t.Fatalf("packet 11 carries LBRR data: %v", fec)
+				}
 				// The same TOC with an empty frame signals a lost packet.
 				stream.Packets[10].Data = []byte{original[0] & 0xfc}
 				var lost bytes.Buffer
@@ -183,8 +194,14 @@ func TestStereoRejectedPacketPreservesRecovery(t *testing.T) {
 				}
 				got, _ := decodeAll(t, &chunkReader{data: corrupt.Bytes(), size: 1}, DecodeOptions{SampleRate: rate, Tolerant: true})
 				want, _ := decodeAll(t, bytes.NewReader(lost.Bytes()), DecodeOptions{SampleRate: rate})
+				if fec {
+					want = tolerantReplay(t, rejected)
+					if rate != SampleRate {
+						want = resampleTo16k(want, 2)
+					}
+				}
 				if !slices.Equal(got, want) {
-					t.Fatal("stereo rejection changed concealment or recovery state")
+					t.Fatal("stereo rejection changed concealment, FEC or recovery state")
 				}
 			})
 		}

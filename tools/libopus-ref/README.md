@@ -196,7 +196,9 @@ committed golden without losses, and that both builds agree on every
 record's kind, sample count and final range; the manifest records how many
 records' PCM differs between them. `opus/decode_logs_test.go` replays the
 cases with `Decode`, `Conceal` and `DecodeFEC` and requires every record bit
-for bit.
+for bit; the root package's `TestTolerantRecoversFromFEC` makes the losses
+of the `lbrr` cases undecodable packets in Ogg and WebM streams and requires
+the `Tolerant` Decoder's output to have the case's PCM hash.
 
 ## packet_ref
 

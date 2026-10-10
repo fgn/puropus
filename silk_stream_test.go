@@ -96,7 +96,11 @@ func TestSilkStrictFailureReturnsCompletePrefix(t *testing.T) {
 				}
 			}
 			// Replacing the rejected packet with explicit lost frames gives an
-			// independent complete-stream expectation, including recovery.
+			// independent complete-stream expectation, including recovery,
+			// unless the next packet carries in-band FEC, which the rejected
+			// packet is then decoded from (tolerantReplay).
+			rejected := &Stream{Header: whole.Header, Packets: slices.Clone(whole.Packets)}
+			fec := opus.HasLBRR(whole.Packets[11].Data)
 			parsed, err := opus.Parse(target.Data, false)
 			if err != nil {
 				t.Fatal(err)
@@ -109,8 +113,14 @@ func TestSilkStrictFailureReturnsCompletePrefix(t *testing.T) {
 			for _, rate := range []int{16000, 48000} {
 				tolerant, _ := decodeAll(t, &chunkReader{data: bad, size: 1}, DecodeOptions{Tolerant: true, SampleRate: rate})
 				want, _ := decodeAll(t, bytes.NewReader(lost.Bytes()), DecodeOptions{SampleRate: rate})
+				if fec {
+					want = tolerantReplay(t, rejected)
+					if rate != SampleRate {
+						want = resampleTo16k(want, rejected.Header.Channels)
+					}
+				}
 				if !slices.Equal(tolerant, want) {
-					t.Fatalf("%dHz: tolerant concealment or recovery differs from a signalled loss", rate)
+					t.Fatalf("%dHz: tolerant concealment, FEC or recovery differs from a signalled loss (FEC %v)", rate, fec)
 				}
 				if len(tolerant) != int((src.Packets[len(src.Packets)-1].End()*int64(rate)+SampleRate-1)/SampleRate) {
 					t.Fatal("tolerant duration changed")
