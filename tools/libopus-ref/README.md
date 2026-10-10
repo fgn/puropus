@@ -61,11 +61,14 @@ sha256sum, and `gen-goldens.sh` an `ffmpeg` binary.
 ## decode_float
 
 The reference decode: `opus_decoder_create(48000, channels)` and
-`opus_decode_float()` with `decode_fec = 0` for every packet in order,
-writing interleaved float32 little-endian PCM at 48 kHz.
+`opus_decode_float()` for every packet in order, writing interleaved float32
+little-endian PCM at 48 kHz. Packets decode with `decode_fec = 0`; lost ones
+are concealed, or recovered from the in-band FEC of the next packet with
+`-fec`.
 
 ```sh
-build/decode_float [-c channels] [-skip n] [-trim n] [-lost n] packets.bit out.f32le [ranges.txt]
+build/decode_float [-c channels] [-skip n] [-trim n] [-lost n] [-drop list]
+                   [-fec lbrr|always] [-log records.txt] packets.bit out.f32le [ranges.txt]
 ```
 
 - `-c` output channels, 1 (default) or 2, independent of the coded channels.
@@ -73,6 +76,12 @@ build/decode_float [-c channels] [-skip n] [-trim n] [-lost n] packets.bit out.f
   decoded stream (pre-skip and end trimming), so the output can be exactly
   what a container-level decoder returns.
 - `-lost n` the duration of lost packets, see below.
+- `-drop list` loses the listed records as well (comma-separated indices and
+  inclusive ranges, such as `0,4,9-11`), see below.
+- `-fec lbrr|always` decodes lost records from the in-band FEC of the next
+  record, see below.
+- `-log records.txt` writes one line per record with the hash of its output,
+  see below.
 
 `packets.bit` is the `opus_demo` bitstream format (also used by the RFC 8251
 test vectors): a sequence of records, each
@@ -86,15 +95,32 @@ test vectors): a sequence of records, each
 A record with length 0 is a lost packet. It is decoded as
 `opus_decode_float(st, NULL, 0, pcm, n, 0)`, where `n` is the record's range
 field when nonzero, else `-lost n`, else the duration of the last packet
-(`OPUS_GET_LAST_PACKET_DURATION`), else 960. For other records a nonzero range
-field is checked against `OPUS_GET_FINAL_RANGE` as `opus_demo` does; a
-mismatch is reported and makes the exit status 1, so
-`build/decode_float testvector01.bit out.f32le` also verifies an official
-vector. A packet libopus rejects stops the program with exit status 1.
+(`OPUS_GET_LAST_PACKET_DURATION`), else 960. A record that `-drop` lists is
+lost too, with `n` the duration of its own packet
+(`opus_packet_get_nb_samples`): the way a container-level decoder handles a
+packet it received but cannot decode, such as the puropus Decoder in
+`Tolerant` mode. For other records a nonzero range field is checked against
+`OPUS_GET_FINAL_RANGE` as `opus_demo` does; a mismatch is reported and makes
+the exit status 1, so `build/decode_float testvector01.bit out.f32le` also
+verifies an official vector. A packet libopus rejects stops the program with
+exit status 1.
+
+With `-fec`, a lost record whose next record is received (neither empty nor
+dropped) decodes as `opus_decode_float(st, next, len, pcm, n, 1)`: libopus
+conceals all but the last frame duration of the `n` samples and decodes that
+part from the next packet's LBRR data, or conceals all of it where no FEC
+can apply. `-fec lbrr` does this only when the next packet's first frame
+carries LBRR data (`opus_packet_has_lbrr`, with a first frame of more than
+one byte, which is `opus.HasLBRR`), as the puropus Decoder and applications
+that check `opus_packet_has_lbrr` do; `-fec always` for every such loss, as
+`opus_demo` does with in-band FEC enabled.
 
 `ranges.txt` receives one line per record: index, payload bytes, samples per
-channel decoded, final range (hex). `decode_float -version` prints the libopus
-version string.
+channel decoded, final range (hex). `records.txt` (`-log`) receives one line
+per record: index, how it was decoded (`packet`, `lost` or `fec`), payload
+bytes, samples per channel, final range (hex) and the 64-bit FNV-1a hash
+(hex) of the record's output as float32 little-endian bytes.
+`decode_float -version` prints the libopus version string.
 
 ## Fixture goldens
 
