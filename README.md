@@ -154,7 +154,9 @@ go run github.com/fgn/puropus/cmd/puropus@latest cut -keep speech.txt -extend 40
 `speech.txt` holds `start end` seconds per line; `#` starts a comment.
 `decode` and `cut` refuse to write over their input (by file identity, so a
 link to it counts) and replace the output file only when they succeed: a
-failed run, a truncated input included, leaves it as it was.
+failed run leaves it as it was. A truncated input is the exception for
+`decode`, which writes what it decoded up to the cut and then exits with the
+error, as `Read` does.
 
 ## Packet level
 

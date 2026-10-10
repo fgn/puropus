@@ -207,19 +207,35 @@ func decode(args []string) error {
 		if errors.Is(rerr, io.EOF) {
 			break
 		}
+		if errors.Is(rerr, puropus.ErrTruncated) {
+			// A recording cut off mid-stream is still audio up to the cut:
+			// keep what was decoded, as Read does, and report the error.
+			if err := finishDecode(w, file); err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stderr, "decoded %v at %d Hz before the input ended early\n", dec.Position(), dec.SampleRate())
+			return rerr
+		}
 		if rerr != nil {
 			return rerr
 		}
 	}
+	if err := finishDecode(w, file); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "decoded %v at %d Hz\n", dec.Position(), dec.SampleRate())
+	return nil
+}
+
+// finishDecode flushes the decoded samples and, when they go to a file,
+// puts the file in place.
+func finishDecode(w *bufio.Writer, file *outputFile) error {
 	if err := w.Flush(); err != nil {
 		return err
 	}
 	if file != nil {
-		if err := file.commit(); err != nil {
-			return err
-		}
+		return file.commit()
 	}
-	fmt.Fprintf(os.Stderr, "decoded %v at %d Hz\n", dec.Position(), dec.SampleRate())
 	return nil
 }
 

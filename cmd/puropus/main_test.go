@@ -240,8 +240,23 @@ func TestOutputIsReplacedOnlyOnSuccess(t *testing.T) {
 	if err := os.WriteFile(output, []byte("previous"), 0o640); err != nil {
 		t.Fatal(err)
 	}
+	// A truncated input is decoded up to where it ends, and reported.
 	if err := decode([]string{"-o", output, truncated}); !errors.Is(err, puropus.ErrTruncated) {
 		t.Fatalf("decoding a truncated file: %v", err)
+	}
+	if got, _ := os.ReadFile(output); len(got) == 0 || len(got)%4 != 0 || len(got) >= 144000*4 {
+		t.Fatalf("a truncated decode left %d bytes in the output, want its decoded prefix", len(got))
+	}
+	// Any other failure leaves the output as it was.
+	if err := os.WriteFile(output, []byte("previous"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	notOpus := filepath.Join(dir, "not-opus.opus")
+	if err := os.WriteFile(notOpus, []byte("this is not an Ogg file at all"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := decode([]string{"-o", output, notOpus}); err == nil {
+		t.Fatal("decoding a file that is not Opus succeeded")
 	}
 	if got, _ := os.ReadFile(output); string(got) != "previous" {
 		t.Fatalf("a failed decode left %d bytes in the output", len(got))
@@ -253,7 +268,7 @@ func TestOutputIsReplacedOnlyOnSuccess(t *testing.T) {
 	if got, _ := os.ReadFile(output); string(got) != "previous" {
 		t.Fatalf("a failed cut left %d bytes in the output", len(got))
 	}
-	if names := dirNames(t, dir); len(names) != 2 {
+	if names := dirNames(t, dir); len(names) != 3 {
 		t.Fatalf("files left behind: %v", names)
 	}
 
