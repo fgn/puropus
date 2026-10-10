@@ -169,3 +169,29 @@ func TestNegativeDiscardPaddingTrimsTheBlockStart(t *testing.T) {
 		}
 	}
 }
+
+// A known-size WebM Cluster that declares bytes the input does not have is
+// truncated even when a stray byte follows its last block: the decoder
+// delivers the block and then ErrTruncated. It used to take the byte for
+// padding after the stream and end cleanly.
+func TestDecodeReportsATruncatedKnownSizeCluster(t *testing.T) {
+	silence, err := opus.Silence(1, opus.BandwidthFullband, 20*ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := webmFile(t, 1, 0, [][]byte{silence[0]}, nil)
+	at := bytes.Index(data, []byte{0x1f, 0x43, 0xb6, 0x75})
+	if at < 0 || data[at+4]&0x80 == 0 {
+		t.Fatal("no one-byte Cluster size")
+	}
+	data = bytes.Clone(data)
+	data[at+4] += 10 // ten more bytes than follow
+	data = append(data, 0)
+	dec, err := NewDecoder(bytes.NewReader(data), DecodeOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pcm, err := readAll(dec, make([]float32, 4096)); !errors.Is(err, ErrTruncated) || len(pcm) != 960 {
+		t.Fatalf("%d samples, error %v, want 960 and ErrTruncated", len(pcm), err)
+	}
+}

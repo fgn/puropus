@@ -240,7 +240,7 @@ func (r *Reader) Next() (Block, error) {
 				if errors.Is(err, io.EOF) || r.trailingInvalidElement(err) {
 					return Block{}, r.endOfInput()
 				}
-				return Block{}, unexpected(err)
+				return Block{}, r.invalidInside(unexpected(err))
 			}
 			switch id {
 			case idCluster:
@@ -273,7 +273,7 @@ func (r *Reader) Next() (Block, error) {
 				if errors.Is(err, io.EOF) || r.trailingInvalidElement(err) {
 					return Block{}, r.endOfInput()
 				}
-				return Block{}, unexpected(err)
+				return Block{}, r.invalidInside(unexpected(err))
 			}
 			if isSegmentLevel(id) {
 				r.inCluster = false
@@ -286,7 +286,7 @@ func (r *Reader) Next() (Block, error) {
 			if (errors.Is(err, io.EOF) && r.clusterRemaining == unknownSize) || r.trailingInvalidElement(err) {
 				return Block{}, r.endOfInput()
 			}
-			return Block{}, unexpected(err)
+			return Block{}, r.invalidInside(unexpected(err))
 		}
 		if size == unknownSize {
 			return Block{}, fmt.Errorf("webm: cluster child 0x%X has unknown size", id)
@@ -726,10 +726,28 @@ func (r *Reader) endOfInput() error {
 }
 
 // trailingInvalidElement reports whether err is an invalid element header
-// after the last Cluster of an unknown-size Segment. Such bytes, zero padding
-// for example, end the stream: everything before them has been delivered.
+// after the last Cluster of an unknown-size Segment, outside any known-size
+// Cluster that still declares bytes. Such bytes, zero padding for example,
+// end the stream: everything before them has been delivered.
 func (r *Reader) trailingInvalidElement(err error) bool {
-	return r.segmentRemaining == unknownSize && r.seenCluster && errors.Is(err, errInvalidElementHeader)
+	unfinished := r.inCluster && r.clusterRemaining > 0
+	return r.segmentRemaining == unknownSize && r.seenCluster && !unfinished && errors.Is(err, errInvalidElementHeader)
+}
+
+// invalidInside returns the error for an invalid element header inside a
+// known-size Cluster or Segment that still declares bytes:
+// io.ErrUnexpectedEOF when the input ends before them, since then the
+// element is cut off rather than corrupt, and err otherwise. Any other error
+// is returned as it is.
+func (r *Reader) invalidInside(err error) error {
+	remaining := r.parentRemaining()
+	if remaining == unknownSize || remaining == 0 || !errors.Is(err, errInvalidElementHeader) {
+		return err
+	}
+	if _, derr := io.CopyN(io.Discard, r.br, remaining); derr != nil {
+		return io.ErrUnexpectedEOF
+	}
+	return err
 }
 
 // consumed records n bytes read from the current Cluster and Segment.

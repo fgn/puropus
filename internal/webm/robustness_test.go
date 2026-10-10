@@ -157,3 +157,35 @@ func TestEndInsideAKnownSizeSegmentIsTruncation(t *testing.T) {
 		}
 	}
 }
+
+// Bytes that are not an element end a live recording only outside any
+// known-size Cluster that still declares bytes. Inside one, a zero byte
+// followed by the end of the input is a Cluster cut off, io.ErrUnexpectedEOF
+// (it used to be taken for trailing padding and a clean end), and garbage
+// filling the declared bytes is an invalid element; zero padding after a
+// finished Cluster still ends the stream.
+func TestInvalidBytesInsideAKnownSizeCluster(t *testing.T) {
+	var cluster []byte
+	cluster = appendUint(cluster, idTimestamp, 0)
+	cluster = append(cluster, simpleBlock(1, []byte{0xAA})...)
+	declaring := func(extra int, tail []byte) []byte {
+		file := minimalStream("A_OPUS")
+		file = appendID(file, idCluster)
+		file = appendSize(file, uint64(len(cluster)+extra))
+		return slices.Concat(file, cluster, tail)
+	}
+	for _, tc := range []struct {
+		name    string
+		file    []byte
+		wantErr error
+	}{
+		{"a zero byte, then the end", declaring(10, []byte{0}), io.ErrUnexpectedEOF},
+		{"ten zero bytes", declaring(10, make([]byte, 10)), errInvalidElementHeader},
+		{"padding after the Cluster", declaring(0, make([]byte, 10)), nil},
+	} {
+		_, blocks, err := readAll(t, tc.file)
+		if len(blocks) != 1 || !errors.Is(err, tc.wantErr) || (tc.wantErr == nil) != (err == nil) {
+			t.Fatalf("%s: %d blocks, error %v, want 1 block and %v", tc.name, len(blocks), err, tc.wantErr)
+		}
+	}
+}

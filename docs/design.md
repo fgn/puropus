@@ -173,10 +173,13 @@ Otherwise, also at the end of the input and before an error, which the next
 `Read` reports, the packet is concealed. Only the audio of the lost packet
 waits for the next packet; positions, trimming and retained packets are
 those of the stream. Input that ends inside a page or element, or between
-elements before the end its known-size WebM Segment declares, yields
-everything decodable, the resampler's tail included, and then
+elements before the end a known-size WebM Segment or Cluster declares,
+yields everything decodable, the resampler's tail included, and then
 `ErrTruncated`. A live recording's unknown-size Segment ends wherever the
-input does.
+input does, and bytes that are not an element, zero padding say, end it
+too, but only outside a known-size Cluster that still declares bytes:
+inside one they are a Cluster cut off, or an invalid element when the
+declared bytes are all there.
 
 A stretch the container lost, an Ogg page dropped for a bad checksum or a
 WebM block a recorder left out, is concealed for its duration, in strict and
