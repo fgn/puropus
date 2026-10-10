@@ -10,9 +10,10 @@ import (
 	"time"
 )
 
-// FuzzDecode feeds arbitrary packets to the decoder. Any byte sequence must
-// either decode or return an error; it must never panic or write outside the
-// output buffer. A packet that parses fails only in hybrid mode, and a
+// FuzzDecode feeds arbitrary packets to the decoder, as packets and as the
+// next packet of DecodeFEC. Any byte sequence must either decode or return an
+// error; it must never panic or write outside the output buffer. A packet
+// that parses fails only in hybrid mode and never in DecodeFEC, and a
 // failure leaves the decoder state unchanged.
 func FuzzDecode(f *testing.F) {
 	silence, _ := Silence(1, BandwidthFullband, 20*time.Millisecond)
@@ -27,7 +28,8 @@ func FuzzDecode(f *testing.F) {
 	}
 	f.Add(append([]byte{14 << 3}, bad...))
 	f.Add(append(append([]byte{14<<3 | 1}, bad...), bad...))
-	for _, name := range []string{"loss-silk", "loss-hybrid", "loss-celt"} {
+	// Packets of each mode; those of the FEC sequences carry LBRR data.
+	for _, name := range []string{"loss-silk", "loss-hybrid", "loss-celt", "channels-silk-fec", "channels-hybrid-fec"} {
 		raw, err := os.ReadFile("testdata/stereo-vectors/" + name + ".json")
 		if err != nil {
 			f.Fatal(err)
@@ -36,7 +38,7 @@ func FuzzDecode(f *testing.F) {
 		if err = json.Unmarshal(raw, &vector); err != nil {
 			f.Fatal(err)
 		}
-		packet, err := hex.DecodeString(vector.Records[0].Packet)
+		packet, err := hex.DecodeString(vector.Records[1].Packet)
 		if err != nil {
 			f.Fatal(err)
 		}
@@ -73,6 +75,35 @@ func FuzzDecode(f *testing.F) {
 				for _, v := range out[:samples*channels] {
 					if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
 						t.Fatal("non-finite concealment")
+					}
+				}
+			}
+			// The packet as the first one after a loss: DecodeFEC fails
+			// exactly when it does not parse, then leaving the state as it
+			// was, and otherwise fills the lost duration with finite audio.
+			for _, samples := range []int{120, 960, 2880, MaxPacketSamples} {
+				before := stateOf(dec)
+				n, err := dec.DecodeFEC(data, samples, out[:MaxPacketSamples*channels])
+				if (err != nil) != (parseErr != nil) {
+					t.Fatalf("DecodeFEC error %v for a packet whose parse error is %v", err, parseErr)
+				}
+				if err != nil {
+					if !reflect.DeepEqual(stateOf(dec), before) {
+						t.Fatal("a rejected DecodeFEC changed the decoder state")
+					}
+					continue
+				}
+				if n != samples {
+					t.Fatalf("DecodeFEC returned %d of %d samples", n, samples)
+				}
+				for _, v := range out[:samples*channels] {
+					if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+						t.Fatal("non-finite FEC decode")
+					}
+				}
+				for _, v := range out[MaxPacketSamples*channels:] {
+					if v != 12345 {
+						t.Fatal("DecodeFEC overran output")
 					}
 				}
 			}
