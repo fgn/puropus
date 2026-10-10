@@ -469,3 +469,60 @@ func TestChromeMediaRecorderCaptureHasNoGaps(t *testing.T) {
 		}
 	}
 }
+
+// Source.Native starts at the first retained packet and ends with the last,
+// however ReleasePackets is paced around a gap: with every packet released
+// before a gap, the gap's concealment used to be retained ahead of the next
+// packet, so Native started early and an exact cut of what was retained
+// failed with ErrNativeRequired. Releasing after every Read, before, during
+// and after a gap, mono and stereo, at 48 and 16 kHz, from a byte at a time,
+// the retained native PCM must be the full decode's for the retained
+// packets, and an exact cut of them must succeed.
+func TestReleaseAroundAGapKeepsNativeAligned(t *testing.T) {
+	for _, gs := range gapStreams(t) {
+		if gs.name == "mono SILK with FEC" {
+			continue // mono and stereo are covered by the others
+		}
+		ch := gs.stream.Header.Channels
+		lost := map[int]bool{60: true, 61: true, 62: true}
+		data := webmWithout(t, gs.stream, lost)
+		_, ref := decodeAll(t, bytes.NewReader(data), DecodeOptions{KeepNative: true})
+		full := ref.Source().Native
+		for _, rate := range []int{SampleRate, 16000} {
+			for _, lag := range []time.Duration{0, 30 * ms} {
+				name := fmt.Sprintf("%s, %d Hz, releasing %v behind", gs.name, rate, lag)
+				d, err := NewDecoder(&chunkReader{data: data, size: 1}, DecodeOptions{SampleRate: rate, KeepNative: true})
+				if err != nil {
+					t.Fatal(err)
+				}
+				buf := make([]float32, rate/100*ch) // 10 ms per Read
+				for reads := 0; ; reads++ {
+					_, err := d.Read(buf)
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					d.ReleasePackets(d.Position() - lag)
+					src := d.Source()
+					if len(src.Packets) == 0 {
+						if len(src.Native) != 0 {
+							t.Fatalf("%s, read %d: %d native samples for no packets", name, reads, len(src.Native))
+						}
+						continue
+					}
+					from, to := src.Packets[0].Start, src.Packets[len(src.Packets)-1].End()
+					if !slices.Equal(src.Native, full[from*int64(ch):to*int64(ch)]) {
+						t.Fatalf("%s, read %d: %d native values for packets covering [%d, %d)", name, reads, len(src.Native), from, to)
+					}
+					if reads%9 == 0 && to-from >= 2*120 {
+						if _, err := Cut(src, Edit{Keep: []Interval{{samplesToDuration(from), samplesToDuration(to)}}, Snap: SnapExact, Encoder: silenceEncoder{}}); err != nil {
+							t.Fatalf("%s, read %d: an exact cut of what is retained: %v", name, reads, err)
+						}
+					}
+				}
+			}
+		}
+	}
+}

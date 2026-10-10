@@ -196,23 +196,29 @@ func (d *Decoder) Source() Source {
 	return Source{Header: d.header, Links: d.tl.links, Packets: d.packets, Native: d.nativePCM()}
 }
 
-// nativePCM returns the retained native PCM: nil when it is not kept, and
-// non-nil, if empty, when it is, so that Cut can tell packets that decode to
-// nothing (all inside the pre-skip, say) from PCM that was never kept.
+// nativePCM returns the retained native PCM of the retained packets: nil
+// when it is not kept, and non-nil, if empty, when it is, so that Cut can
+// tell packets that decode to nothing (all inside the pre-skip, say) from
+// PCM that was never kept. It starts at the first packet and ends with the
+// last, though the retained PCM may already run on into a gap the Decoder is
+// still concealing.
 func (d *Decoder) nativePCM() []float32 {
 	if !d.opts.KeepNative {
 		return nil
 	}
-	total := 0
-	for _, b := range d.nativeBlocks {
-		total += len(b)
+	want := 0
+	if n := len(d.packets); n > 0 {
+		want = int(d.packets[n-1].End()-d.nativeStart) * d.channels
 	}
-	if d.nativeCache != nil && len(d.nativeCache) == total {
+	if d.nativeCache != nil && len(d.nativeCache) == want {
 		return d.nativeCache
 	}
-	out := make([]float32, 0, total) // not nil, even when total is 0
+	out := make([]float32, 0, want) // not nil, even when want is 0
 	for _, b := range d.nativeBlocks {
-		out = append(out, b...)
+		out = append(out, b[:min(len(b), want-len(out))]...)
+		if len(out) == want {
+			break
+		}
 	}
 	d.nativeCache = out
 	return out
@@ -409,7 +415,13 @@ func (d *Decoder) fillGap() error {
 	skip, kept := d.tl.concealed(min(samples, part))
 	pcm := d.buf48[skip*d.channels : (skip+kept)*d.channels]
 	if d.opts.KeepNative {
-		d.keepNative(pcm)
+		if len(d.packets) > 0 {
+			d.keepNative(pcm) // between retained packets, once the next one comes
+		} else {
+			// Every packet before the gap was released: retained native
+			// PCM starts at the next packet.
+			d.nativeStart += int64(kept)
+		}
 	}
 	d.emit(pcm)
 	return nil
