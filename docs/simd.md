@@ -79,8 +79,9 @@ could follow vector code:
   because its own code may contain legacy SSE spills and copies and a
   preemption may have left the state dirty, and `silk.Decoder.Decode`
   clears it once per frame for the scalar code that follows.
-- **Resampler**: each kernel call ends with it, and the group of trailing
-  outputs clears it before copying its results.
+- **Resampler**: each kernel clears it after its whole groups, before the
+  zero-padded copy for the trailing outputs is made, and the group of
+  trailing outputs clears it again before copying its results.
 
 The CELT stereo post-filter runs its scalar de-emphasis recurrences inside
 the vector loop; that is safe only because its comb filter uses 128-bit

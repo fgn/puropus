@@ -199,8 +199,11 @@ scalar kernel, `accel_*.go` the dispatch and vector kernels.
   driver loop that calls its group function directly; through a function
   value, escape analysis moved the padded copy to the heap, two allocations
   in every call that ended in a partial group. 256-bit kernels run only
-  when AVX2 is present and 512-bit ones only with AVX-512; every kernel ends
-  with `ClearAVXUpperBits`. Dispatch requires AVX for any vector kernel
+  when AVX2 is present and 512-bit ones only with AVX-512. Every kernel
+  calls `ClearAVXUpperBits` after its whole groups, before the padded copy
+  is zeroed and filled (with the upper halves dirty, that legacy SSE code
+  made a call of 41 outputs take 54% longer), and again after the partial
+  group. Dispatch requires AVX for any vector kernel
   (`GODEBUG=cpu.avx=off` leaves AVX2/FMA reported but selects scalar).
 
 ## Tests
