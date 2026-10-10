@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/fgn/puropus/opus"
@@ -614,5 +615,34 @@ func TestDecodeChainedOggWithLostTagsPage(t *testing.T) {
 	first[oggPages(t, a)[1].start+40] ^= 0x01
 	if _, err := NewDecoder(bytes.NewReader(first), DecodeOptions{}); err == nil {
 		t.Fatal("first link without OpusTags accepted")
+	}
+}
+
+// An Ogg file in which no BOS page carries OpusHead is not Opus: a file with
+// only a Vorbis stream is ErrUnsupported, not truncated, and so is one whose
+// only OpusHead page is corrupt, the error then counting the dropped pages.
+// A file that ends after its OpusHead is truncated.
+func TestOggWithoutOpusStreamIsUnsupported(t *testing.T) {
+	grouped := readFixture(t, "ogg-grouped-vorbis-opus.ogg")
+	pages := oggPages(t, grouped) // Vorbis, Opus, Vorbis, Opus, Vorbis, Opus, Opus
+	page := func(i int) []byte { return grouped[pages[i].start : pages[i].start+pages[i].size] }
+	vorbis := slices.Concat(page(0), page(2), page(4))
+	corruptHead := bytes.Clone(readFixture(t, "ogg-celt-fb.opus"))
+	corruptHead[40] ^= 0x01
+	for name, data := range map[string][]byte{"Vorbis only": vorbis, "corrupt OpusHead": corruptHead} {
+		_, err := NewDecoder(bytes.NewReader(data), DecodeOptions{})
+		if !errors.Is(err, ErrUnsupported) || errors.Is(err, ErrTruncated) {
+			t.Fatalf("%s: NewDecoder: %v, want ErrUnsupported", name, err)
+		}
+		if _, err := ReadPackets(bytes.NewReader(data)); !errors.Is(err, ErrUnsupported) {
+			t.Fatalf("%s: ReadPackets: %v, want ErrUnsupported", name, err)
+		}
+		if name == "corrupt OpusHead" && !strings.Contains(err.Error(), "1 corrupt pages dropped") {
+			t.Fatalf("%s: %v does not count the dropped page", name, err)
+		}
+	}
+	a := readFixture(t, "ogg-celt-fb.opus")
+	if _, err := NewDecoder(bytes.NewReader(a[:oggPages(t, a)[1].start]), DecodeOptions{}); !errors.Is(err, ErrTruncated) || errors.Is(err, io.EOF) {
+		t.Fatalf("OpusHead alone: %v, want ErrTruncated", err)
 	}
 }

@@ -133,7 +133,11 @@ when the Opus stream's EOS page was lost. The file then decodes as if the
 link had ended on the page before: the lost page's packets are missing, as
 is the end trimming its granule position set, and the next link's header
 applies. A chained link whose OpusTags page was lost is decoded too;
-the first link must have its OpusTags. ffmpeg handles these cases the same
+the first link must have its OpusTags, or `NewDecoder` fails. A file in
+which no BOS page carries OpusHead, because it has no Opus stream or because
+its only OpusHead page is corrupt, is `ErrUnsupported`, and the error counts
+the corrupt pages dropped; one that ends after its OpusHead is
+`ErrTruncated`. ffmpeg handles these cases the same
 way, except that it joins a packet's fragments across a lost page, into a
 packet that fails to decode (its native decoder renders it as silence); it
 loses the pages swallowed by a corrupt page whose size runs past the end of

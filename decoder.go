@@ -518,6 +518,13 @@ func openOgg(br *bufio.Reader) (packetSource, Header, error) {
 		return len(packet) >= 8 && string(packet[:8]) == "OpusHead"
 	})
 	first, err := r.Next()
+	if errors.Is(err, io.EOF) {
+		// Every page was read and no BOS page carried OpusHead.
+		if dropped := r.DroppedPages(); dropped > 0 {
+			return nil, Header{}, unsupported("Ogg file without an Opus stream (%d corrupt pages dropped)", dropped)
+		}
+		return nil, Header{}, unsupported("Ogg file without an Opus stream")
+	}
 	if err != nil {
 		return nil, Header{}, wrapContainer(err)
 	}
@@ -526,6 +533,9 @@ func openOgg(br *bufio.Reader) (packetSource, Header, error) {
 		return nil, Header{}, fmt.Errorf("puropus: first Ogg packet: %w", err)
 	}
 	tags, err := r.Next()
+	if errors.Is(err, io.EOF) {
+		err = io.ErrUnexpectedEOF // the input ended inside the headers
+	}
 	if err != nil {
 		return nil, Header{}, wrapContainer(err)
 	}
