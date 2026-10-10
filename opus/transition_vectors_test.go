@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -87,11 +88,12 @@ func (g *transitionVectorError) String() string {
 		g.Samples, g.Exact, g.WorstRMS, g.RMSRecord, g.Max, g.MaxRecord, g.MaxSample)
 }
 
-// Waveform gates. Every frame must stay within RMS 1e-6 and peak 1e-4 of the
+// Waveform gates. On amd64 and 386 every sample must have the bits of the
 // decode of libopus's generic C build, the code the port follows,
-// concealment included. The tests log how many samples match exactly; when
-// this was written every sequence matched bit for bit in the scalar, SIMD,
-// GOAMD64=v3 and 386 builds. The committed reference
+// concealment included, in the scalar, SIMD, GOAMD64=v3 and 386 builds
+// alike (genericBitExact). Elsewhere, where fused multiply-adds and the
+// math library need not round as on x86, every frame must stay within RMS
+// 1e-6 and peak 1e-4 of it. The committed reference
 // PCM comes from libopus's default build, whose SSE xcorr_kernel, which
 // celt_fir and celt_iir use in CELT pitch concealment, sums in another order
 // than the generic C. Measured with the two libopus builds on these
@@ -105,6 +107,13 @@ const (
 	strictRMS, strictPeak = 1e-6, 1e-4
 	buildsRMS, buildsPeak = 3e-4, 5e-4
 )
+
+// genericBitExact reports whether this architecture's float arithmetic
+// rounds as the generic build's does on x86-64, so its PCM must match
+// bit for bit, not only within the waveform gates.
+func genericBitExact() bool {
+	return runtime.GOARCH == "amd64" || runtime.GOARCH == "386"
+}
 
 // transitionVectorMode returns the mode of a configuration (0 SILK, 1 hybrid,
 // 2 CELT), or -1 for none.
@@ -276,6 +285,9 @@ func TestTransitionVectors(t *testing.T) {
 				g := groups[label]
 				t.Logf("%s: against the generic build %v; against the default build %v; libopus builds apart %v",
 					label, &g.generic, &g.stock, &g.builds)
+				if genericBitExact() && g.generic.Exact != g.generic.Samples {
+					t.Errorf("%s: %d of %d samples have the generic build's bits", label, g.generic.Exact, g.generic.Samples)
+				}
 				if g.generic.WorstRMS > strictRMS || g.generic.Max > strictPeak {
 					t.Errorf("%s waveform exceeds RMS %g / max %g against the generic build", label, strictRMS, strictPeak)
 				}

@@ -242,9 +242,9 @@ packet, and losses across mode, bandwidth, frame size and channel switches).
   tests require it of the SILK-only streams sample by sample, of the
   CELT-only streams frame by frame, and of the hybrid fixtures and every FEC
   case packet by packet, by hash, the `Tolerant` decoder's FEC recovery
-  included. On all 28 sequences, hybrid included, they gate every frame at
-  RMS 1e-6 and peak 1e-4 and log the bit-identical samples, which are all of
-  them.
+  included. On all 28 sequences, hybrid included, they require every sample
+  to be bit-identical on amd64 and 386, and gate every frame at RMS 1e-6 and
+  peak 1e-4 on other architectures.
 - **Stock libopus.** A second gate compares with libopus as most programs
   build it, with its x86 SIMD kernels, at the same limits, except for CELT
   pitch concealment and the frames recovering from it, which allow RMS 3e-4

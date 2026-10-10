@@ -49,8 +49,10 @@ func readFileHashes(t *testing.T, path string) map[string]string {
 // TestStereoReferenceVectors replays fifteen stereo libopus sequences, which
 // switch modes, bandwidths and coded channel counts and include losses and
 // DTX, on mono and stereo decoders. Sample counts and final ranges match
-// exactly; PCM uses the frame limits of TestTransitionVectors against the
-// decodes of libopus's generic and default builds.
+// exactly; PCM has the bits of libopus's generic build where
+// genericBitExact holds, and everywhere stays within the frame limits of
+// TestTransitionVectors against the decodes of the generic and default
+// builds.
 func TestStereoReferenceVectors(t *testing.T) {
 	root := filepath.Join("testdata", "stereo-vectors")
 	hashes := readFileHashes(t, filepath.Join(root, "manifest.json"))
@@ -157,6 +159,9 @@ func TestStereoReferenceVectors(t *testing.T) {
 					}
 					if total != tc.Samples {
 						t.Fatal("incomplete replay")
+					}
+					if genericBitExact() && gen.Exact != gen.Samples {
+						t.Errorf("%d of %d samples have the generic build's bits", gen.Exact, gen.Samples)
 					}
 					t.Logf("against the generic build %v; against the default build %v; libopus builds apart %v",
 						&gen, &stock, &builds)

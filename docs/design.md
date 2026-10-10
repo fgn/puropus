@@ -446,9 +446,10 @@ x86 SIMD kernels chosen at run time.
    (TOC-only packets, zero-length frames, encoded DTX in quiet input),
    recovery, mode switches, and a malformed packet that libopus rejects,
    which must be rejected with the final range unchanged. Results, sample
-   counts and final ranges are exact. Every frame's PCM must be within RMS
-   1e-6 and peak 1e-4 of the generic build, and is in fact bit-identical to
-   it in the scalar, SIMD, `GOAMD64=v3` and 386 builds. Against the default
+   counts and final ranges are exact. On amd64 and 386 every sample must
+   be bit-identical to the generic build's, in the scalar, SIMD,
+   `GOAMD64=v3` and 386 builds alike; on other architectures every frame's
+   PCM must be within RMS 1e-6 and peak 1e-4 of it. Against the default
    build the same limits apply, except to CELT pitch concealment and the
    frames recovering from it, which allow RMS 3e-4 and peak 5e-4: the two
    libopus builds differ there by up to RMS 2.60e-4 and peak 4.79e-4 (twelve
