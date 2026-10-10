@@ -152,6 +152,9 @@ go run github.com/fgn/puropus/cmd/puropus@latest cut -keep speech.txt -extend 40
 ```
 
 `speech.txt` holds `start end` seconds per line; `#` starts a comment.
+`decode` and `cut` refuse to write over their input (by file identity, so a
+link to it counts) and replace the output file only when they succeed: a
+failed run, a truncated input included, leaves it as it was.
 
 ## Packet level
 
