@@ -181,9 +181,11 @@ func pageSamples(t *testing.T, data []byte, p oggPage) int {
 }
 
 // A corrupt page in the middle of a recording is dropped and decoding
-// continues. The output is the clean decode minus that page's samples; the
-// audio before the page is untouched; end trimming still applies because it
-// is anchored to granule positions, not to a running sum of what was decoded.
+// continues. The page's audio is concealed, since the granule position of
+// the page after it shows how much is missing (RFC 7845 §4.1), so the output
+// keeps the clean decode's length and every later sample its position; the
+// audio before the page is untouched, and end trimming still applies.
+// ffmpeg drops the page's samples instead: 96 000 of 144 000.
 func TestDecodeSkipsCorruptOggPage(t *testing.T) {
 	clean := readFixture(t, "ogg-celt-fb.opus")
 	want, _ := decodeAll(t, bytes.NewReader(clean), DecodeOptions{})
@@ -203,8 +205,16 @@ func TestDecodeSkipsCorruptOggPage(t *testing.T) {
 		data := append([]byte(nil), clean...)
 		corrupt(data)
 		got, dec := decodeAll(t, bytes.NewReader(data), DecodeOptions{})
-		if len(got) != len(want)-dropped {
-			t.Fatalf("%s: %d samples, want %d (clean %d minus the page's %d)", name, len(got), len(want)-dropped, len(want), dropped)
+		if len(got) != len(want) {
+			t.Fatalf("%s: %d samples, want the clean decode's %d", name, len(got), len(want))
+		}
+		src, err := ReadPackets(bytes.NewReader(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		lost := dropped / 960
+		if hole := src.Packets[50].Start - src.Packets[49].End(); len(src.Packets) != 151-lost || hole != int64(dropped) {
+			t.Fatalf("%s: %d packets, a hole of %d samples after the first page", name, len(src.Packets), hole)
 		}
 		for i := 0; i < before; i++ {
 			if got[i] != want[i] {
@@ -386,11 +396,13 @@ func TestGroupedOggCorruptPageOfAnotherStreamKeepsOpusPacket(t *testing.T) {
 
 // A corrupt page of the Opus stream itself costs the packets completed on it
 // and the packet spanning it, whether it lies inside that packet or completes
-// it: the fragments on either side are never joined. The audio before it is
-// untouched and decoding goes on after it. ffmpeg produces as many samples
-// when the page completes the packet. For the page inside it, ffmpeg joins
-// the fragments it has, fails to decode the result and puts a packet's
-// duration of silence in its place.
+// it: the fragments on either side are never joined, and the audio is
+// concealed, so the output keeps its length. The audio before it is
+// untouched and decoding goes on after it. For the page inside the packet,
+// ffmpeg joins the fragments it has, fails to decode the result and puts a
+// packet's duration of silence in its place, so it keeps the length too; for
+// the page that completes it, ffmpeg drops the 40 packets lost and returns
+// 10 248 samples.
 func TestGroupedOggCorruptOpusPageDropsSpanningPacket(t *testing.T) {
 	pages, middle, _, completing := groupedSpanningOgg(t)
 	want, _ := decodeAll(t, bytes.NewReader(bytes.Join(pages, nil)), DecodeOptions{})
@@ -401,11 +413,12 @@ func TestGroupedOggCorruptOpusPageDropsSpanningPacket(t *testing.T) {
 		samples int
 		packets int
 	}{
-		{"inside the packet", middle, len(want) - 960, 50},
-		// Packets 10 to 49 are lost. The last packet keeps its encoder
-		// padding, as with ffmpeg: end trimming is anchored to the granule
-		// position of the page before it, now the first audio page's.
-		{"completing the packet", completing, intact + 960, 11},
+		{"inside the packet", middle, len(want), 50},
+		// Packets 10 to 49 are lost, and the page after them is the final
+		// one, where the lost audio and the end trimming cannot be told
+		// apart: the gap reaches the final granule position, and the last
+		// packet keeps its encoder padding.
+		{"completing the packet", completing, len(want), 11},
 	} {
 		data := bytes.Clone(bytes.Join(pages, nil))
 		at := 0

@@ -61,8 +61,9 @@ type Header struct {
 // container discards: the stream's (or link's) pre-skip and a WebM block's
 // negative DiscardPadding at the start, the end trimming of an Ogg final
 // granule position or a positive DiscardPadding at the end. Packets tile the
-// timeline, so each one starts where the previous one ends, and a packet
-// that lies entirely inside the pre-skip contributes nothing.
+// timeline, so each one starts where the previous one ends, except after a
+// gap the container lost, which the decoder conceals and no packet covers;
+// a packet that lies entirely inside the pre-skip contributes nothing.
 type Packet struct {
 	Data     []byte
 	Start    int64
@@ -107,7 +108,8 @@ type Source struct {
 	Links   []Header
 	Packets []Packet
 	// Native holds the decoded 48 kHz interleaved PCM of Packets before
-	// output gain, starting at Packets[0].Start and covering every packet.
+	// output gain, starting at Packets[0].Start and covering every packet,
+	// and the concealment of any gap between them.
 	// It is only required for SnapExact. It is nil unless the Decoder was
 	// asked to keep it, and then not nil even when the packets decode to
 	// nothing.

@@ -129,10 +129,9 @@ Matroska specification defines the two as separate discards and does not
 combine them. ffmpeg does not agree with itself there (6.1.1 drops 480
 samples in all for a pre-skip of 312 and a padding of -480, n9.0.2 only the
 pre-skip), and decodes negative padding elsewhere as puropus does. The WebM
-reader handles
-unknown-size Segment and Cluster elements, as live recordings have them,
-`SimpleBlock`s and `BlockGroup`s, and skips other tracks; laced blocks are an
-error. The Ogg reader selects the Opus stream among grouped logical streams
+reader handles unknown-size Segment and Cluster elements, as live recordings
+have them, `SimpleBlock`s and `BlockGroup`s, and skips other tracks; laced
+blocks are an error. The Ogg reader selects the Opus stream among grouped logical streams
 and reads chained links in sequence.
 
 A page with a bad checksum or version is dropped, and the reader
@@ -179,11 +178,32 @@ everything decodable, the resampler's tail included, and then
 `ErrTruncated`. A live recording's unknown-size Segment ends wherever the
 input does.
 
-The containers' own timestamps are not used to find lost packets: a WebM
-block or an Ogg page that is missing altogether (rather than present and
-undecodable) leaves no gap in the decoded timeline, which simply continues
-with the next packet, so neither concealment nor FEC applies to it. A page
-the Ogg reader drops for a bad checksum is such a gap.
+A stretch the container lost, an Ogg page dropped for a bad checksum or a
+WebM block a recorder left out, is concealed for its duration, in strict and
+`Tolerant` mode alike, so `Position`, the retained packets and every later
+sample keep the input's timeline, which VAD and ASR alignment need. The Ogg
+source finds the gap from the next page's granule position, which counts
+exactly the samples of the packets on the page (RFC 7845 §4.1), and the WebM
+source from the next block's timestamp, when it is past the end of the block
+before by more than the timestamps' resolution, on the 2.5 ms grid of Opus
+frames. The gap then comes out as the lost packets would in `Tolerant` mode,
+in parts of the next packet's duration: concealed, and its last part
+decoded from that packet's in-band FEC when it has some
+(`TestContainerGapsAreConcealed`). Granule positions that jump with no page
+lost, against §4.1, are filled the same way, so positions follow them, as
+is the duration of a packet that does not parse, which the next granule
+position or timestamp shows. A gap before the first audio page or block of
+a link is not found, since a first granule position or timestamp may be an
+offset (RFC 7845 §4.5), nor is one at the end of a link or file, which
+nothing after it shows. On a final Ogg page the lost audio and the end
+trimming cannot be told apart, so the gap reaches the final granule position
+and the last packet keeps its encoder padding, its audio up to its length
+early. No gap is filled beyond 10 minutes, against a corrupt or hostile
+granule position or timestamp. The retained packets leave a hole where the
+gap is, which the retained native PCM covers with the concealment and a cut
+fills with silence. ffmpeg drops the lost audio, so its output is shorter
+by it and every later sample comes early: 96 000 samples instead of 144 000
+for a lost Ogg page of 1 s, 135 360 for three lost WebM blocks of 60 ms.
 
 The WebM writer produces the single-track, unknown-size-Segment, 1 ms
 timestamp profile that browsers emit, splitting clusters before a relative
@@ -248,7 +268,9 @@ Packets are positioned on the decoded timeline. Each `Packet` records the
 samples it contributes (`Start`, `Duration`) and the coded samples at its
 edges that the container discards (`Skip` for pre-skip, `Trim` for an Ogg
 final granule or WebM `DiscardPadding`), so packets tile the timeline from 0
-and `Source.Duration()` is exactly what `Read` delivers. A packet that lies
+and `Source.Duration()` is exactly what `Read` delivers. The exception is a
+gap the container lost, which the decoder conceals: no packet covers it, so
+the packet after it starts later than the one before it ends. A packet that lies
 entirely inside the pre-skip contributes nothing. Chained Ogg links continue
 the same timeline: `Packet.Link` numbers each packet's link and
 `Source.Links` holds each link's header, so the boundary, where the decoder
@@ -276,7 +298,10 @@ output discards it as the pre-skip of its first packet or the end trimming
 of its last, so the promise holds at the source's ends too
 (`TestCutExactKeepsItsToleranceAtTheSourceEnds`); the `Encoder` contract makes the
 implementation responsible for its own algorithmic delay, since only it knows
-the delay and its frame sizes.
+the delay and its frame sizes. A gap inside a region is filled with
+silence of its length (rounded up to 2.5 ms), mapped as synthetic; a region
+inside a gap selects nothing, except with `SnapExact`, which re-encodes the
+concealment from the native PCM.
 
 Selected packets are laid on a fresh continuous timeline, in output links:
 the packets of each source link that a selection keeps go to a link of

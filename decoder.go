@@ -26,8 +26,10 @@ type DecodeOptions struct {
 	// packet carries some, as libopus applications do on a loss, and
 	// concealed otherwise; codec history is kept for what follows. The next
 	// packet is read before the lost packet's audio is returned.
-	// Unparseable packets are skipped. Corrupt Ogg pages are always dropped,
-	// regardless of this setting.
+	// Unparseable packets are skipped. Whatever the setting, corrupt Ogg
+	// pages are dropped, and audio the container lost, which the next Ogg
+	// granule position or WebM block timestamp shows, is concealed the same
+	// way, so positions keep the input's timeline.
 	Tolerant bool
 	// KeepPackets retains every packet so Source can hand them to Cut.
 	KeepPackets bool
@@ -50,16 +52,13 @@ type Decoder struct {
 
 	rate      int
 	channels  int
-	preSkip   int   // pre-skip of the current link, in 48 kHz samples
-	skipped   int   // pre-skip samples dropped so far in the current link
-	timeline  int64 // 48 kHz samples emitted across all links
-	delivered int64 // output samples per channel returned by Read
+	tl        timeline // where packets and concealed gaps land, across all links
+	delivered int64    // output samples per channel returned by Read
 
 	buf48   []float32
 	rsOut   []float32
 	out     []float32 // PCM ready for Read, consumed from outPos
 	outPos  int
-	links   []Header // the header of each link so far, for Source
 	packets []Packet
 	// native is kept in fixed-size blocks so retaining a long stream does not
 	// repeatedly regrow and copy one large slice; Source concatenates once.
@@ -67,10 +66,14 @@ type Decoder struct {
 	nativeCache  []float32
 	nativeStart  int64 // timeline position of the first retained native sample
 	// ahead is the packet after an undecodable one, read in Tolerant mode
-	// for its in-band FEC; fill decodes it next.
+	// for its in-band FEC, or the packet after a gap; fill decodes it next.
 	ahead lookahead
-	done  bool
-	err   error
+	// gap is how much audio the container lost before the packet in ahead
+	// that is still to be concealed, in parts of gapPart samples.
+	gap     int
+	gapPart int
+	done    bool
+	err     error
 }
 
 // lookahead is a result of packetSource.next read ahead of its turn.
@@ -120,9 +123,8 @@ func NewDecoder(r io.Reader, opts DecodeOptions) (*Decoder, error) {
 		codec:    codec,
 		rate:     opts.SampleRate,
 		channels: header.Channels,
-		preSkip:  header.PreSkip,
+		tl:       newTimeline(header),
 		gain:     gainScale(header.OutputGain),
-		links:    []Header{header},
 		buf48:    make([]float32, opus.MaxPacketSamples*header.Channels),
 	}
 	if d.rate != SampleRate {
@@ -191,7 +193,7 @@ func (d *Decoder) Read(p []float32) (int, error) {
 // positioned on the same timeline as Position and Read, so intervals decided
 // on the decoded audio apply to them directly.
 func (d *Decoder) Source() Source {
-	return Source{Header: d.header, Links: d.links, Packets: d.packets, Native: d.nativePCM()}
+	return Source{Header: d.header, Links: d.tl.links, Packets: d.packets, Native: d.nativePCM()}
 }
 
 // nativePCM returns the retained native PCM: nil when it is not kept, and
@@ -252,7 +254,7 @@ func (d *Decoder) ReleasePackets(t time.Duration) {
 	if !d.opts.KeepNative {
 		return
 	}
-	start := d.timeline
+	start := d.tl.position
 	if len(d.packets) > 0 {
 		start = d.packets[0].Start
 	}
@@ -288,6 +290,9 @@ func (d *Decoder) fill() error {
 	if d.done {
 		return io.EOF
 	}
+	if d.gap > 0 {
+		return d.fillGap()
+	}
 	data, meta, err := d.nextPacket()
 	if err != nil {
 		if errors.Is(err, io.ErrUnexpectedEOF) {
@@ -295,12 +300,20 @@ func (d *Decoder) fill() error {
 		}
 		return d.finishInput(err)
 	}
+	if meta.gapBefore > 0 {
+		// Conceal the audio the container lost before the packet first.
+		meta.gapBefore, d.gap = 0, meta.gapBefore
+		d.ahead = lookahead{data: data, meta: meta, ok: true}
+		d.gapPart = opus.MaxPacketSamples
+		if parsed, err := opus.Parse(data, false); err == nil {
+			d.gapPart = parsed.Duration48()
+		}
+		return d.fillGap()
+	}
 	if meta.newLink {
 		d.codec.Reset()
-		d.preSkip = meta.preSkip
 		d.gain = gainScale(meta.outputGain)
-		d.skipped = 0
-		d.links = append(d.links, meta.linkHeader(d.header))
+		d.tl.startLink(meta)
 	}
 
 	parsed, perr := opus.Parse(data, false)
@@ -312,7 +325,7 @@ func (d *Decoder) fill() error {
 	}
 	if err != nil {
 		if !d.opts.Tolerant {
-			return d.finishInput(fmt.Errorf("puropus: packet at %v: %w", samplesToDuration(d.timeline), err))
+			return d.finishInput(fmt.Errorf("puropus: packet at %v: %w", samplesToDuration(d.tl.position), err))
 		}
 		if perr != nil {
 			return nil //nolint:nilerr // an unparseable packet has no duration to conceal and is skipped
@@ -349,7 +362,7 @@ func (d *Decoder) nextPacket() ([]byte, packetMeta, error) {
 func (d *Decoder) recoverLost(samples int) (int, error) {
 	data, meta, err := d.src.next()
 	d.ahead = lookahead{data: data, meta: meta, err: err, ok: true}
-	if err == nil && !meta.newLink && opus.HasLBRR(data) {
+	if err == nil && !meta.newLink && meta.gapBefore == 0 && opus.HasLBRR(data) {
 		return d.codec.DecodeFEC(data, samples, d.buf48)
 	}
 	return d.codec.Conceal(samples, d.buf48)
@@ -368,21 +381,52 @@ func (d *Decoder) finishInput(err error) error {
 	return err
 }
 
+// fillGap conceals the next part of the gap before the packet in ahead, as
+// recoverLost does a packet that did not decode: the gap's last part comes
+// from the packet's in-band FEC when it carries some, the rest is concealed.
+// The parts are the packet's duration, so a gap of whole packets of that
+// duration comes out as those packets would, lost, in Tolerant mode. A part
+// that is not a multiple of 2.5 ms, which only granule positions or
+// timestamps off the frame grid can ask for, is concealed to the next one
+// and cut short.
+func (d *Decoder) fillGap() error {
+	part := d.gap % d.gapPart
+	if part == 0 {
+		part = d.gapPart
+	}
+	d.gap -= part
+	const grid = 120
+	samples := (part + grid - 1) / grid * grid
+	var err error
+	if d.gap == 0 && samples == part && !d.ahead.meta.newLink && opus.HasLBRR(d.ahead.data) {
+		samples, err = d.codec.DecodeFEC(d.ahead.data, samples, d.buf48)
+	} else {
+		samples, err = d.codec.Conceal(samples, d.buf48)
+	}
+	if err != nil {
+		return d.finishInput(err)
+	}
+	skip, kept := d.tl.concealed(min(samples, part))
+	pcm := d.buf48[skip*d.channels : (skip+kept)*d.channels]
+	if d.opts.KeepNative {
+		d.keepNative(pcm)
+	}
+	d.emit(pcm)
+	return nil
+}
+
 // finishPacket places a decoded packet on the timeline: it drops the
 // pre-skip and end trimming the packet carries, retains the packet and its
 // native PCM when asked to, and emits the rest.
 func (d *Decoder) finishPacket(data []byte, meta packetMeta, decoded []float32) {
-	samples := len(decoded) / d.channels
-	skip, preSkipped, kept, trim := packetWindow(samples, meta.trimStart, d.preSkip-d.skipped, meta.trimEnd)
-	d.skipped += preSkipped
-	pcm := decoded[skip*d.channels : (skip+kept)*d.channels]
+	p := d.tl.packet(data, len(decoded)/d.channels, meta)
 	if d.opts.KeepPackets {
-		d.packets = append(d.packets, Packet{Data: data, Start: d.timeline, Duration: kept, Skip: skip, Trim: trim, Link: len(d.links) - 1})
+		d.packets = append(d.packets, p)
 	}
+	pcm := decoded[p.Skip*d.channels : (p.Skip+p.Duration)*d.channels]
 	if d.opts.KeepNative {
 		d.keepNative(pcm)
 	}
-	d.timeline += int64(len(pcm) / d.channels)
 	d.emit(pcm)
 }
 
@@ -462,12 +506,52 @@ func packetWindow(coded, trimStart, preSkipLeft, trimEnd int) (skip, preSkipped,
 	return skip, preSkipped, coded - skip - trim, trim
 }
 
+// timeline lays packets and concealed audio on the decoded timeline, the
+// same way for the Decoder and ReadPackets.
+type timeline struct {
+	links    []Header // the header of each link so far
+	preSkip  int      // pre-skip of the current link, in 48 kHz samples
+	skipped  int      // pre-skip samples dropped so far in the current link
+	position int64    // 48 kHz samples on the timeline so far, across all links
+}
+
+func newTimeline(first Header) timeline {
+	return timeline{links: []Header{first}, preSkip: first.PreSkip}
+}
+
+// startLink starts the chained link whose first packet meta describes.
+func (tl *timeline) startLink(meta packetMeta) {
+	tl.links = append(tl.links, meta.linkHeader(tl.links[0]))
+	tl.preSkip, tl.skipped = meta.preSkip, 0
+}
+
+// packet places a packet of coded samples and returns it positioned.
+func (tl *timeline) packet(data []byte, coded int, meta packetMeta) Packet {
+	skip, preSkipped, duration, trim := packetWindow(coded, meta.trimStart, tl.preSkip-tl.skipped, meta.trimEnd)
+	tl.skipped += preSkipped
+	p := Packet{Data: data, Start: tl.position, Duration: duration, Skip: skip, Trim: trim, Link: len(tl.links) - 1}
+	tl.position += int64(duration)
+	return p
+}
+
+// concealed places n samples of concealed audio, which no packet carries:
+// the pre-skip takes what it still needs first.
+func (tl *timeline) concealed(n int) (skip, kept int) {
+	skip = min(max(tl.preSkip-tl.skipped, 0), n)
+	tl.skipped += skip
+	tl.position += int64(n - skip)
+	return skip, n - skip
+}
+
 // packetMeta carries container-level information about one packet.
 type packetMeta struct {
 	// trimStart and trimEnd are the numbers of 48 kHz samples to drop from
 	// the start and the end of this packet's decoded audio.
 	trimStart int
 	trimEnd   int
+	// gapBefore is the audio the container lost before this packet, in
+	// 48 kHz samples, which the decoder conceals.
+	gapBefore int
 	// newLink marks the first packet of a chained Ogg link, whose header
 	// gives the pre-skip and output gain from here on.
 	newLink    bool
@@ -533,7 +617,12 @@ type oggSource struct {
 	pageDuration    int64
 	previousGranule int64
 	haveGranule     bool
+	gap             int // lost audio found on a page without audio packets, before the next one
 }
+
+// maxGap bounds the audio the Decoder conceals for one gap in the container,
+// against a corrupt or hostile granule position or timestamp: 10 minutes.
+const maxGap = 10 * 60 * SampleRate
 
 // oggPacket is an audio packet of the current page.
 type oggPacket struct {
@@ -628,7 +717,22 @@ func (s *oggSource) readPage() error {
 	if s.haveGranule {
 		expected += s.previousGranule
 	}
-	if last.EOS && expected > last.Granule {
+	switch {
+	case s.haveGranule && last.Granule > expected:
+		// A page's granule position counts exactly the samples of the
+		// packets on it (RFC 7845 §4.1), so audio is missing: pages of the
+		// stream were lost before this one. Its packets come after the
+		// gap. On a final page the lost audio and the end trimming cannot
+		// be told apart, so the gap reaches the final granule position and
+		// nothing is trimmed. A first page's larger granule position is an
+		// offset (RFC 7845 §4.5), not a gap.
+		gap := int(min(last.Granule-expected, maxGap))
+		if s.linkStart < len(s.page) {
+			s.page[s.linkStart].meta.gapBefore += gap
+		} else {
+			s.gap += gap
+		}
+	case last.EOS && expected > last.Granule:
 		trim := expected - last.Granule
 		for i := len(s.page) - 1; i >= s.linkStart && trim > 0; i-- {
 			t := min(trim, int64(s.page[i].duration))
@@ -659,6 +763,7 @@ func (s *oggSource) queue(p ogg.Packet) error {
 		s.needTags = true
 		s.pageDuration = 0
 		s.haveGranule = false
+		s.gap = 0
 		s.linkStart = len(s.page)
 		return nil
 	}
@@ -671,6 +776,7 @@ func (s *oggSource) queue(p ogg.Packet) error {
 		return nil
 	}
 	packet := oggPacket{data: p.Data}
+	packet.meta.gapBefore, s.gap = s.gap, 0
 	if s.pendingLink {
 		packet.meta.newLink = true
 		packet.meta.preSkip = s.pendingPreSkip
@@ -686,9 +792,16 @@ func (s *oggSource) queue(p ogg.Packet) error {
 }
 
 // webmSource reads the Opus track of a WebM file, deriving each block's
-// trimming from its DiscardPadding.
+// trimming from its DiscardPadding, and the audio missing before a block
+// from its timestamp.
 type webmSource struct {
 	r *webm.Reader
+	// tick is the timestamp resolution in 48 kHz samples, rounded up;
+	// expected is where the block after the last one starts: its
+	// timestamp plus its duration.
+	tick     int64
+	expected int64
+	started  bool
 }
 
 func openWebM(br *bufio.Reader) (packetSource, Header, error) {
@@ -715,7 +828,8 @@ func openWebM(br *bufio.Reader) (packetSource, Header, error) {
 		PreSkip:    preSkip,
 		OutputGain: gain,
 	}
-	return &webmSource{r: r}, header, nil
+	tick := (int64(r.Info().TimecodeScale)*SampleRate + int64(time.Second) - 1) / int64(time.Second)
+	return &webmSource{r: r, tick: tick}, header, nil
 }
 
 func (s *webmSource) reuseData() { s.r.ReuseBlockData() }
@@ -734,6 +848,19 @@ func (s *webmSource) next() ([]byte, packetMeta, error) {
 	case b.DiscardPadding < 0:
 		meta.trimStart = int(durationToSamples(-b.DiscardPadding))
 	}
+	// A block that starts later than the one before it ends, by more than
+	// the timestamps' rounding, follows lost blocks: the gap is the
+	// difference on the 2.5 ms grid of Opus frames. The first block's
+	// timestamp is where the stream starts.
+	at := durationToSamples(b.Timestamp)
+	if late := at - s.expected; s.started && late > s.tick {
+		meta.gapBefore = int(min((late+60)/120*120, maxGap))
+	}
+	coded := int64(0)
+	if parsed, err := opus.Parse(b.Data, false); err == nil {
+		coded = int64(parsed.Duration48())
+	}
+	s.expected, s.started = at+coded, true
 	return b.Data, meta, nil
 }
 
@@ -755,30 +882,30 @@ func ReadPackets(r io.Reader) (Source, error) {
 	if err != nil {
 		return Source{}, err
 	}
-	out := Source{Header: header, Links: []Header{header}}
-	position := int64(0)
-	preSkip := header.PreSkip
-	skipped := 0
+	out := Source{Header: header}
+	tl := newTimeline(header)
+	finish := func(err error) (Source, error) {
+		out.Links = tl.links
+		return out, err
+	}
 	for {
 		data, meta, err := src.next()
 		if errors.Is(err, io.EOF) {
-			return out, nil
+			return finish(nil)
 		}
 		if err != nil {
-			return out, wrapContainer(err)
+			return finish(wrapContainer(err))
 		}
+		// A gap is a stretch of the timeline no packet covers, which the
+		// Decoder conceals.
+		tl.concealed(meta.gapBefore)
 		if meta.newLink {
-			preSkip = meta.preSkip
-			skipped = 0
-			out.Links = append(out.Links, meta.linkHeader(header))
+			tl.startLink(meta)
 		}
 		parsed, err := opus.Parse(data, false)
 		if err != nil {
-			return out, fmt.Errorf("puropus: packet at %v: %w", samplesToDuration(position), err)
+			return finish(fmt.Errorf("puropus: packet at %v: %w", samplesToDuration(tl.position), err))
 		}
-		skip, preSkipped, duration, trim := packetWindow(parsed.Duration48(), meta.trimStart, preSkip-skipped, meta.trimEnd)
-		skipped += preSkipped
-		out.Packets = append(out.Packets, Packet{Data: data, Start: position, Duration: duration, Skip: skip, Trim: trim, Link: len(out.Links) - 1})
-		position += int64(duration)
+		out.Packets = append(out.Packets, tl.packet(data, parsed.Duration48(), meta))
 	}
 }

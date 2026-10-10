@@ -205,7 +205,14 @@ func Cut(src Source, edit Edit) (*Stream, error) {
 				return nil, err
 			}
 		}
-		for _, p := range packets {
+		for i, p := range packets {
+			if i > 0 && p.Start > packets[i-1].End() {
+				// Audio the container lost, which the decoder conceals:
+				// silence of the same length keeps the timeline.
+				if err := b.fillHole(p.Start-packets[i-1].End(), packets[i-1].End()); err != nil {
+					return nil, err
+				}
+			}
 			b.push(p)
 		}
 		kept++
@@ -424,6 +431,14 @@ func (b *builder) silence(d time.Duration, bandwidth opus.Bandwidth) error {
 	}
 	b.audible = true
 	return nil
+}
+
+// fillHole inserts silence for a stretch of n samples at source position at
+// that no packet covers, rounded up to the 2.5 ms grid of Opus frames: the
+// gaps the Decoder and ReadPackets find are on it already.
+func (b *builder) fillHole(n, at int64) error {
+	const grid = 120
+	return b.silence(samplesToDuration((n+grid-1)/grid*grid), b.bandwidthNear(at-1))
 }
 
 // selectPackets returns the source packets a region keeps: those overlapping
