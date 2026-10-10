@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"math/rand/v2"
+	"runtime"
 	"slices"
 	"testing"
 	"time"
@@ -412,4 +413,59 @@ func multiples(n int, step int64) []int64 {
 		out[i] = int64(i) * step
 	}
 	return out
+}
+
+// The Chrome capture in testdata (MediaRecorder through Web Audio, the
+// recorder's default settings; see testdata/manifest.json) has timestamps up
+// to 6 ms off the samples' clock. It decodes to its packets and nothing
+// more: 717 120 samples at 48 kHz and 239 040 at 16 kHz, as with ffmpeg 6.1.1
+// and n9.0.2, bit for bit libopus's generic build on amd64, and its retained
+// packets tile the timeline.
+func TestChromeMediaRecorderCaptureHasNoGaps(t *testing.T) {
+	data := readFixture(t, "webm-chrome-mediarecorder.webm")
+	r, err := webm.NewReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	worst, expected := int64(0), int64(-1)
+	for {
+		b, err := r.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		at := durationToSamples(b.Timestamp)
+		if expected >= 0 {
+			worst = max(worst, abs(at-expected))
+		}
+		parsed, err := opus.Parse(b.Data, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected = at + int64(parsed.Duration48())
+	}
+	if worst < 5*48 {
+		t.Fatalf("the capture's timestamps are at most %d samples off: not the jitter this fixture is for", worst)
+	}
+	got, dec := decodeAll(t, bytes.NewReader(data), DecodeOptions{KeepPackets: true})
+	if len(got) != 717120 {
+		t.Fatalf("%d samples at 48 kHz, ffmpeg's 717120", len(got))
+	}
+	if runtime.GOARCH == "amd64" || runtime.GOARCH == "386" {
+		if !slices.Equal(got, readGolden48kPCM(t, "webm-chrome-mediarecorder.webm")) {
+			t.Fatal("not libopus's generic decode bit for bit")
+		}
+	}
+	got16, _ := decodeAll(t, bytes.NewReader(data), DecodeOptions{SampleRate: 16000})
+	if len(got16) != 239040 {
+		t.Fatalf("%d samples at 16 kHz, ffmpeg's 239040", len(got16))
+	}
+	packets := dec.Source().Packets
+	for i := 1; i < len(packets); i++ {
+		if packets[i].Start != packets[i-1].End() {
+			t.Fatalf("a hole of %d samples before packet %d", packets[i].Start-packets[i-1].End(), i)
+		}
+	}
 }

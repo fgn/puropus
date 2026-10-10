@@ -221,9 +221,10 @@ leave a hole where the gap is, which the retained native PCM covers with
 the concealment and a cut fills with silence. ffmpeg drops the lost audio,
 so its output is shorter by it and every later sample comes early: 96 000
 samples instead of 144 000 for a lost Ogg page of 1 s, 135 360 for three
-lost WebM blocks of 60 ms. On recordings without loss the two agree, as
-for timestamps with ±3 ms of jitter at 1 ms, 100 µs and 10 ms ticks
-(`TestWebMTimestampJitterIsNotAGap`).
+lost WebM blocks of 60 ms. On recordings without loss the two agree: the
+Chrome capture in `testdata` decodes to ffmpeg's 717 120 samples
+(`TestChromeMediaRecorderCaptureHasNoGaps`), as do timestamps with ±3 ms of
+jitter at 1 ms, 100 µs and 10 ms ticks (`TestWebMTimestampJitterIsNotAGap`).
 
 The WebM writer produces the single-track, unknown-size-Segment, 1 ms
 timestamp profile that browsers emit, splitting clusters before a relative

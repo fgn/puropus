@@ -40,6 +40,7 @@ var fixtures = []string{
 	"ogg-silk-nb-10ms.opus", "ogg-silk-nb-40ms.opus", "ogg-silk-mb-40ms.opus", "ogg-silk-mb-60ms.opus",
 	"ogg-silk-nb-fec.opus", "ogg-silk-mb-fec.opus", "ogg-silk-wb-60ms-fec.opus",
 	"webm-celt-20ms.webm", "webm-celt-40ms.webm", "webm-celt-60ms.webm",
+	"webm-chrome-mediarecorder.webm",
 }
 
 // silkFixture reports whether a fixture carries SILK or hybrid packets; the
@@ -51,10 +52,16 @@ func silkFixture(name string) bool {
 // readGolden48kPCM reads the complete libopus float decode of a fixture at
 // 48 kHz, after pre-skip and end trimming: <stem>.48k.f32le for the SILK and
 // hybrid fixtures, <stem>.libopus48.f32le (tools/libopus-ref/gen-goldens.sh)
-// for the CELT ones.
+// for the CELT ones, and <stem>.generic48.f32le, from the generic build, for
+// the Chrome capture.
 func readGolden48kPCM(t testing.TB, name string) []float32 {
-	if silkFixture(name) {
+	switch {
+	case silkFixture(name):
 		return readPCMGolden(t, stem(name)+".48k.f32le")
+	case strings.HasPrefix(name, "webm-chrome-"):
+		// The Chrome capture's reference comes from libopus's generic
+		// build, whose 48 kHz output puropus's is bit for bit on amd64.
+		return readPCMGolden(t, stem(name)+".generic48.f32le")
 	}
 	return readPCMGolden(t, stem(name)+".libopus48.f32le")
 }
