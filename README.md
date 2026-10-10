@@ -282,9 +282,22 @@ in more detail.
 
 ## Limitations
 
-- Loss is recovered only for packets that are present: a WebM block or Ogg
-  page missing from the input (a dropped corrupt page included) leaves no
-  gap to conceal, and the timeline continues with the next packet.
+- Audio a container lost is concealed only where the container shows it,
+  by the next Ogg page's granule position or the next WebM block's
+  timestamp. So nothing is concealed for a loss before a link's first page
+  or block, whose granule position or timestamp may be an offset, or after
+  its last, which nothing follows.
+- On a final Ogg page, lost audio and end trimming cannot be told apart:
+  when the page before it is lost, the gap runs to the final granule
+  position and the last packet keeps its encoder padding, its audio up to a
+  packet early.
+- WebM timestamps follow the recorder's capture clock, not the samples, so
+  a gap counts only from half the next block's duration: a lost block
+  shorter than that is not found. A gap's length is its lateness on the
+  2.5 ms grid, or whole packets of the next block's duration when within
+  8 ms of them; for other lengths it is accurate to the timestamps' jitter.
+- No gap is concealed beyond 10 minutes, against a corrupt or hostile
+  granule position or timestamp.
 - No encoder. See `SnapExact` above.
 - No laced WebM blocks, and no channel mapping families other than 0 (so at
   most two channels).
