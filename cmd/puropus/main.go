@@ -83,14 +83,24 @@ func usage() {
               [-silence DUR] [-leading DUR] [-trailing DUR] [-inward]
               [-format ogg|webm] -o OUTPUT INPUT
 INPUT may be - for stdin. Decoded output is interleaved little-endian float32.
+An output file is written beside its destination and replaces it only when
+the command succeeds; the input file itself is refused as the output.
 `)
 }
 
-func open(path string) (io.ReadCloser, error) {
+// open opens the input file, or returns standard input for "-".
+func open(path string) (*os.File, error) {
 	if path == "-" {
-		return io.NopCloser(os.Stdin), nil
+		return os.Stdin, nil
 	}
 	return os.Open(path)
+}
+
+// closeInput closes an input that open opened.
+func closeInput(f *os.File) {
+	if f != os.Stdin {
+		closeQuietly(f)
+	}
 }
 
 func inspect(args []string) error {
@@ -107,7 +117,7 @@ func inspect(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer closeQuietly(in)
+	defer closeInput(in)
 	src, err := puropus.ReadPackets(bufio.NewReader(in))
 	if err != nil && len(src.Packets) == 0 {
 		return err
@@ -144,7 +154,7 @@ func inspect(args []string) error {
 	return nil
 }
 
-func decode(args []string) (err error) {
+func decode(args []string) error {
 	fs := flag.NewFlagSet("decode", flag.ExitOnError)
 	rate := fs.Int("rate", 48000, "output sample rate: 48000 or 16000")
 	tolerant := fs.Bool("tolerant", false, "recover undecodable packets from the next packet's in-band FEC, or conceal them, instead of failing")
@@ -163,19 +173,15 @@ func decode(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer closeQuietly(in)
-	out := os.Stdout
+	defer closeInput(in)
+	var out io.Writer = os.Stdout
+	var file *outputFile
 	if *output != "-" {
-		f, cerr := os.Create(*output)
-		if cerr != nil {
-			return cerr
+		if file, err = createOutput(*output, in); err != nil {
+			return err
 		}
-		defer func() {
-			if cerr := f.Close(); err == nil {
-				err = cerr
-			}
-		}()
-		out = f
+		defer file.abort() // a failed run leaves the output as it was
+		out = file
 	}
 	dec, err := puropus.NewDecoder(in, puropus.DecodeOptions{SampleRate: *rate, Tolerant: *tolerant})
 	if err != nil {
@@ -196,12 +202,16 @@ func decode(args []string) (err error) {
 			break
 		}
 		if rerr != nil {
-			_ = w.Flush()
 			return rerr
 		}
 	}
 	if err := w.Flush(); err != nil {
 		return err
+	}
+	if file != nil {
+		if err := file.commit(); err != nil {
+			return err
+		}
 	}
 	fmt.Fprintf(os.Stderr, "decoded %v at %d Hz\n", dec.Position(), dec.SampleRate())
 	return nil
@@ -237,7 +247,7 @@ func cut(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer closeQuietly(in)
+	defer closeInput(in)
 	src, err := puropus.ReadPackets(bufio.NewReader(in))
 	if err != nil {
 		return err
@@ -274,20 +284,19 @@ func cut(args []string) error {
 	default:
 		return fmt.Errorf("unknown format %q", *format)
 	}
-	f, err := os.Create(*output)
+	file, err := createOutput(*output, in)
 	if err != nil {
 		return err
 	}
-	w := bufio.NewWriter(f)
+	defer file.abort() // a failed run leaves the output as it was
+	w := bufio.NewWriter(file)
 	if err := stream.Write(w, target); err != nil {
-		closeQuietly(f)
 		return err
 	}
 	if err := w.Flush(); err != nil {
-		closeQuietly(f)
 		return err
 	}
-	if err := f.Close(); err != nil {
+	if err := file.commit(); err != nil {
 		return err
 	}
 	synthetic := 0
