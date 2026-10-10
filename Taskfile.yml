@@ -136,12 +136,12 @@ tasks:
   fuzz:
     desc: run the container, packet and codec fuzz targets briefly
     cmds:
-      - CGO_ENABLED=0 go test ./internal/ogg -run '^$' -fuzz FuzzReader -fuzztime {{ .FUZZTIME | default "20s" }}
-      - CGO_ENABLED=0 go test ./internal/webm -run '^$' -fuzz FuzzReader -fuzztime {{ .FUZZTIME | default "20s" }}
-      - CGO_ENABLED=0 go test ./opus -run '^$' -fuzz FuzzParse -fuzztime {{ .FUZZTIME | default "20s" }}
-      - CGO_ENABLED=0 go test ./opus -run '^$' -fuzz FuzzDecode -fuzztime {{ .FUZZTIME | default "20s" }}
-      - CGO_ENABLED=0 go test ./opus/internal/celt -run '^$' -fuzz FuzzDecodeWithEC -fuzztime {{ .FUZZTIME | default "20s" }}
-      - CGO_ENABLED=0 go test ./opus/internal/silk -run '^$' -fuzz FuzzDecode -fuzztime {{ .FUZZTIME | default "20s" }}
+      - CGO_ENABLED=0 go test ./internal/ogg -run '^$' -fuzz FuzzReader -fuzztime {{ .FUZZTIME | default "20s" }} -fuzzminimizetime 5s
+      - CGO_ENABLED=0 go test ./internal/webm -run '^$' -fuzz FuzzReader -fuzztime {{ .FUZZTIME | default "20s" }} -fuzzminimizetime 5s
+      - CGO_ENABLED=0 go test ./opus -run '^$' -fuzz FuzzParse -fuzztime {{ .FUZZTIME | default "20s" }} -fuzzminimizetime 5s
+      - CGO_ENABLED=0 go test ./opus -run '^$' -fuzz FuzzDecode -fuzztime {{ .FUZZTIME | default "20s" }} -fuzzminimizetime 5s
+      - CGO_ENABLED=0 go test ./opus/internal/celt -run '^$' -fuzz FuzzDecodeWithEC -fuzztime {{ .FUZZTIME | default "20s" }} -fuzzminimizetime 5s
+      - CGO_ENABLED=0 go test ./opus/internal/silk -run '^$' -fuzz FuzzDecode -fuzztime {{ .FUZZTIME | default "20s" }} -fuzzminimizetime 5s
   bench:
     desc: run the decode benchmarks on the committed fixtures
     cmds:
