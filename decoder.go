@@ -370,8 +370,8 @@ func (d *Decoder) finishInput(err error) error {
 // native PCM when asked to, and emits the rest.
 func (d *Decoder) finishPacket(data []byte, meta packetMeta, decoded []float32) {
 	samples := len(decoded) / d.channels
-	skip, kept, trim := packetWindow(samples, d.preSkip-d.skipped, meta.trimEnd)
-	d.skipped += skip
+	skip, preSkipped, kept, trim := packetWindow(samples, meta.trimStart, d.preSkip-d.skipped, meta.trimEnd)
+	d.skipped += preSkipped
 	pcm := decoded[skip*d.channels : (skip+kept)*d.channels]
 	if d.opts.KeepPackets {
 		d.packets = append(d.packets, Packet{Data: data, Start: d.timeline, Duration: kept, Skip: skip, Trim: trim})
@@ -445,21 +445,26 @@ func gainScale(gainQ78 int16) float32 {
 	return float32(math.Pow(10, float64(gainQ78)/(20*256)))
 }
 
-// packetWindow splits a packet's coded samples into the pre-skip it absorbs
-// (up to preSkipLeft), the samples it contributes to the timeline, and the
-// end trimming the container asked for. Trimming applies first, so a packet
-// inside the pre-skip that is also trimmed contributes nothing.
-func packetWindow(coded, preSkipLeft, trimEnd int) (skip, duration, trim int) {
+// packetWindow splits a packet's coded samples into those the container
+// discards from its start, those it contributes to the timeline, and those it
+// trims from its end. The start loses the packet's own leading discard
+// (trimStart, a negative WebM DiscardPadding) and then up to preSkipLeft of
+// the stream's pre-skip, which preSkipped reports. Trimming applies first,
+// so a packet inside the pre-skip that is also trimmed contributes nothing.
+func packetWindow(coded, trimStart, preSkipLeft, trimEnd int) (skip, preSkipped, duration, trim int) {
 	trim = min(max(trimEnd, 0), coded)
-	skip = min(max(preSkipLeft, 0), coded-trim)
-	return skip, coded - skip - trim, trim
+	lead := min(max(trimStart, 0), coded-trim)
+	preSkipped = min(max(preSkipLeft, 0), coded-trim-lead)
+	skip = lead + preSkipped
+	return skip, preSkipped, coded - skip - trim, trim
 }
 
 // packetMeta carries container-level information about one packet.
 type packetMeta struct {
-	// trimEnd is the number of 48 kHz samples to drop from the end of this
-	// packet's decoded audio.
-	trimEnd int
+	// trimStart and trimEnd are the numbers of 48 kHz samples to drop from
+	// the start and the end of this packet's decoded audio.
+	trimStart int
+	trimEnd   int
 	// newLink marks the first packet of a chained Ogg link, whose header
 	// gives the pre-skip and output gain from here on.
 	newLink    bool
@@ -671,8 +676,8 @@ func (s *oggSource) queue(p ogg.Packet) error {
 	return nil
 }
 
-// webmSource reads the Opus track of a WebM file, deriving end trimming from
-// DiscardPadding.
+// webmSource reads the Opus track of a WebM file, deriving each block's
+// trimming from its DiscardPadding.
 type webmSource struct {
 	r *webm.Reader
 }
@@ -711,9 +716,14 @@ func (s *webmSource) next() ([]byte, packetMeta, error) {
 	if err != nil {
 		return nil, packetMeta{}, err
 	}
+	// DiscardPadding drops audio from the end of the block when positive and
+	// from its start when negative (Matroska).
 	meta := packetMeta{}
-	if b.DiscardPadding > 0 {
+	switch {
+	case b.DiscardPadding > 0:
 		meta.trimEnd = int(durationToSamples(b.DiscardPadding))
+	case b.DiscardPadding < 0:
+		meta.trimStart = int(durationToSamples(-b.DiscardPadding))
 	}
 	return b.Data, meta, nil
 }
@@ -756,8 +766,8 @@ func ReadPackets(r io.Reader) (Source, error) {
 		if err != nil {
 			return out, fmt.Errorf("puropus: packet at %v: %w", samplesToDuration(position), err)
 		}
-		skip, duration, trim := packetWindow(parsed.Duration48(), preSkip-skipped, meta.trimEnd)
-		skipped += skip
+		skip, preSkipped, duration, trim := packetWindow(parsed.Duration48(), meta.trimStart, preSkip-skipped, meta.trimEnd)
+		skipped += preSkipped
 		out.Packets = append(out.Packets, Packet{Data: data, Start: position, Duration: duration, Skip: skip, Trim: trim})
 		position += int64(duration)
 	}

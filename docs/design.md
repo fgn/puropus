@@ -121,7 +121,15 @@ invalid: puropus then returns no audio, ffmpeg the first packet after its
 pre-skip.
 
 WebM pre-skip comes from the `OpusHead` in `CodecPrivate`, with `CodecDelay`
-as a fallback when there is no `OpusHead`. The WebM reader handles
+as a fallback when there is no `OpusHead`. A block's `DiscardPadding` drops
+audio from its end when positive and from its start when negative
+(Matroska), on any block; the start's samples are the packet's `Skip`. On
+the first block they come before the pre-skip, which still applies: the
+Matroska specification defines the two as separate discards and does not
+combine them. ffmpeg does not agree with itself there (6.1.1 drops 480
+samples in all for a pre-skip of 312 and a padding of -480, n9.0.2 only the
+pre-skip), and decodes negative padding elsewhere as puropus does. The WebM
+reader handles
 unknown-size Segment and Cluster elements, as live recordings have them,
 `SimpleBlock`s and `BlockGroup`s, and skips other tracks; laced blocks are an
 error. The Ogg reader selects the Opus stream among grouped logical streams

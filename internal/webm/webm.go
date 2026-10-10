@@ -98,8 +98,9 @@ type Block struct {
 	Data []byte
 	// Timestamp is the container timestamp of the block.
 	Timestamp time.Duration
-	// DiscardPadding is the amount of decoded audio at the end of the block
-	// the muxer asked to drop (BlockGroup only).
+	// DiscardPadding is the amount of the block's decoded audio the muxer
+	// asked to drop (BlockGroup only): from the end of the block when
+	// positive, from its start when negative.
 	DiscardPadding time.Duration
 }
 
@@ -955,9 +956,10 @@ func header(opts WriterOptions, codecPrivate []byte) []byte {
 }
 
 // WriteBlock appends one Opus packet lasting duration48 samples at 48 kHz.
-// A positive discard48 asks players to drop that many samples from the end
-// of the packet's decoded audio, which needs a BlockGroup with
-// DiscardPadding instead of a SimpleBlock.
+// A nonzero discard48 asks players to drop that many samples of the packet's
+// decoded audio, from its end when positive and from its start when
+// negative, which needs a BlockGroup with DiscardPadding instead of a
+// SimpleBlock.
 func (w *Writer) WriteBlock(data []byte, duration48, discard48 int) error {
 	if w.failed != nil {
 		return w.failed
@@ -976,7 +978,7 @@ func (w *Writer) WriteBlock(data []byte, duration48, discard48 int) error {
 	// Track number 1 as a VINT, the timestamp relative to the cluster, and
 	// the SimpleBlock keyframe flag.
 	block := append([]byte{0x81, byte(uint16(relative) >> 8), byte(relative), 0x80}, data...)
-	if discard48 > 0 {
+	if discard48 != 0 {
 		block[3] = 0 // a Block has no keyframe flag
 		group := appendElement(nil, idBlock, block)
 		group = appendInt(group, idDiscardPadding, int64(time.Duration(discard48)*time.Second/48000))
